@@ -6,6 +6,7 @@ rebase). Only saturated blue pixels move: the white plane and the transparent
 edge stay. Needs python-pillow + python-numpy.
 
 Usage: desktop/purple.py <tdesktop tree> [degrees]
+Import: from purple import rotate  (android/ reuses it for launcher icons)
 """
 import glob
 import sys
@@ -13,16 +14,12 @@ import sys
 import numpy as np
 from PIL import Image
 
-SHIFT = float(sys.argv[2]) if len(sys.argv) > 2 else 60  # 202° (Telegram blue) -> 262°; below ~60 reads royal blue
+SHIFT = 60  # 202° (Telegram blue) -> 262°; below ~60 reads royal blue, not purple
 HUE_BAND = (180, 235)   # degrees that count as "Telegram blue"
 MIN_SAT = 0.2
 
-art = sys.argv[1] + "/Telegram/Resources/art/"
-files = sorted(glob.glob(art + "icon[0-9]*.png") + glob.glob(art + "logo_256*.png")
-               + glob.glob(art + "icon_round*.png"))
 
-
-def rotate(path):
+def rotate(path, shift=SHIFT):
     img = Image.open(path).convert("RGBA")
     rgba = np.asarray(img).astype(np.float64) / 255
     rgb, alpha = rgba[..., :3], rgba[..., 3:]
@@ -36,7 +33,7 @@ def rotate(path):
         [((g - b) / d) % 6, (b - r) / d + 2],
         (r - g) / d + 4) * 60
     move = (delta > 0) & (sat >= MIN_SAT) & (hue >= HUE_BAND[0]) & (hue <= HUE_BAND[1])
-    h = np.where(move, (hue + SHIFT) % 360, hue) / 60
+    h = np.where(move, (hue + shift) % 360, hue) / 60
     c = delta
     x = c * (1 - np.abs(h % 2 - 1))
     z = np.zeros_like(c)
@@ -52,6 +49,11 @@ def rotate(path):
     return int(move.sum())
 
 
-for f in files:
-    rotate(f)
-print(f"{len(files)} icons rotated {SHIFT:g}°")
+if __name__ == "__main__":
+    shift = float(sys.argv[2]) if len(sys.argv) > 2 else SHIFT
+    art = sys.argv[1] + "/Telegram/Resources/art/"
+    files = sorted(glob.glob(art + "icon[0-9]*.png") + glob.glob(art + "logo_256*.png")
+                   + glob.glob(art + "icon_round*.png"))
+    for f in files:
+        rotate(f, shift)
+    print(f"{len(files)} icons rotated {shift:g}°")
