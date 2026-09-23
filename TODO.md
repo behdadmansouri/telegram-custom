@@ -1,8 +1,6 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
-- [ ] 🧍 **Install desktop build deps** `S`: one `pacman` line, in [USAGE.md](USAGE.md); unblocks the first desktop build
-- [ ] 🤖 **First stock desktop build** `M`: `desktop/build.sh` once deps are in
 - [ ] 🤖 **First stock Android build** `M`: CI run on push; fix whatever breaks
 - [ ] 🤖 **Compile + fix desktop patches 0001-0006** `M`: ads, custom emoji, per-folder counters, similar channels, stories, ghost mode; written, apply cleanly, never compiled
 
