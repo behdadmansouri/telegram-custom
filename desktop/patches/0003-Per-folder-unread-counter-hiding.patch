@@ -1,0 +1,235 @@
+From 64ff2aefc692fc11fb9446ab804924c832e60f5c Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 15:04:27 -0400
+Subject: [PATCH 3/3] Per-folder unread counter hiding
+
+Right-click a folder tab (top strip or sidebar) -> Hide/Show unread counter.
+Stored in <workdir>/custom.json via a new Custom:: settings module that later
+patches reuse.
+---
+ Telegram/CMakeLists.txt                       |  2 +
+ .../SourceFiles/custom/custom_settings.cpp    | 80 +++++++++++++++++++
+ Telegram/SourceFiles/custom/custom_settings.h | 15 ++++
+ .../ui/widgets/chat_filters_tabs_strip.cpp    | 17 +++-
+ .../window/window_filters_menu.cpp            | 17 +++-
+ 5 files changed, 123 insertions(+), 8 deletions(-)
+ create mode 100644 Telegram/SourceFiles/custom/custom_settings.cpp
+ create mode 100644 Telegram/SourceFiles/custom/custom_settings.h
+
+diff --git a/Telegram/CMakeLists.txt b/Telegram/CMakeLists.txt
+index 1c76dfa1..92810ff6 100644
+--- a/Telegram/CMakeLists.txt
++++ b/Telegram/CMakeLists.txt
+@@ -541,6 +541,8 @@ PRIVATE
+     chat_helpers/tabbed_selector.h
+     chat_helpers/ttl_media_layer_widget.cpp
+     chat_helpers/ttl_media_layer_widget.h
++    custom/custom_settings.cpp
++    custom/custom_settings.h
+     core/application.cpp
+     core/application.h
+     core/proxy_rotation_manager.cpp
+diff --git a/Telegram/SourceFiles/custom/custom_settings.cpp b/Telegram/SourceFiles/custom/custom_settings.cpp
+new file mode 100644
+index 00000000..33115cab
+--- /dev/null
++++ b/Telegram/SourceFiles/custom/custom_settings.cpp
+@@ -0,0 +1,80 @@
++// telegram-custom: see custom_settings.h.
++#include "custom/custom_settings.h"
++
++#include "settings.h"
++
++#include <QtCore/QFile>
++#include <QtCore/QSaveFile>
++#include <QtCore/QJsonArray>
++#include <QtCore/QJsonDocument>
++#include <QtCore/QJsonObject>
++
++namespace Custom {
++namespace {
++
++struct State {
++	base::flat_set<FilterId> hiddenFolderCounters;
++	rpl::event_stream<> changes;
++};
++
++[[nodiscard]] QString Path() {
++	return cWorkingDir() + u"custom.json"_q;
++}
++
++State &Get() {
++	static auto state = State();
++	static auto loaded = false;
++	if (!loaded) {
++		loaded = true;
++		auto file = QFile(Path());
++		if (file.open(QIODevice::ReadOnly)) {
++			const auto object = QJsonDocument::fromJson(file.readAll()).object();
++			const auto list = object.value(u"hiddenFolderCounters"_q).toArray();
++			for (const auto &id : list) {
++				state.hiddenFolderCounters.emplace(FilterId(id.toInt()));
++			}
++		}
++	}
++	return state;
++}
++
++void Save() {
++	auto list = QJsonArray();
++	for (const auto id : Get().hiddenFolderCounters) {
++		list.push_back(int(id));
++	}
++	auto object = QJsonObject();
++	object.insert(u"hiddenFolderCounters"_q, list);
++
++	// Atomic: a crash mid-write can't truncate the old file.
++	auto file = QSaveFile(Path());
++	if (file.open(QIODevice::WriteOnly)) {
++		file.write(QJsonDocument(object).toJson());
++		file.commit();
++	}
++}
++
++} // namespace
++
++bool FolderCounterHidden(FilterId id) {
++	return Get().hiddenFolderCounters.contains(id);
++}
++
++rpl::producer<bool> FolderCounterHiddenValue(FilterId id) {
++	return Get().changes.events_starting_with(
++		rpl::empty_value()
++	) | rpl::map([=] {
++		return FolderCounterHidden(id);
++	}) | rpl::distinct_until_changed();
++}
++
++void ToggleFolderCounterHidden(FilterId id) {
++	auto &state = Get();
++	if (!state.hiddenFolderCounters.remove(id)) {
++		state.hiddenFolderCounters.emplace(id);
++	}
++	Save();
++	state.changes.fire({});
++}
++
++} // namespace Custom
+diff --git a/Telegram/SourceFiles/custom/custom_settings.h b/Telegram/SourceFiles/custom/custom_settings.h
+new file mode 100644
+index 00000000..b466d426
+--- /dev/null
++++ b/Telegram/SourceFiles/custom/custom_settings.h
+@@ -0,0 +1,15 @@
++// telegram-custom: our own settings, kept in <workdir>/custom.json so they
++// never touch upstream's settings serialization (keeps rebases trivial).
++#pragma once
++
++#include "data/data_types.h"
++
++namespace Custom {
++
++// Folders whose unread badge is hidden (per folder, toggled from the folder
++// tab's context menu). 0 is "All chats".
++[[nodiscard]] bool FolderCounterHidden(FilterId id);
++[[nodiscard]] rpl::producer<bool> FolderCounterHiddenValue(FilterId id);
++void ToggleFolderCounterHidden(FilterId id);
++
++} // namespace Custom
+diff --git a/Telegram/SourceFiles/ui/widgets/chat_filters_tabs_strip.cpp b/Telegram/SourceFiles/ui/widgets/chat_filters_tabs_strip.cpp
+index 20338a6d..2e17194d 100644
+--- a/Telegram/SourceFiles/ui/widgets/chat_filters_tabs_strip.cpp
++++ b/Telegram/SourceFiles/ui/widgets/chat_filters_tabs_strip.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "ui/widgets/chat_filters_tabs_strip.h"
++#include "custom/custom_settings.h" // telegram-custom
+ 
+ #include "api/api_chat_filters_remove_manager.h"
+ #include "boxes/choose_filter_box.h"
+@@ -130,6 +131,12 @@ void ShowMenu(
+ 			std::move(openFiltersSettings),
+ 			&st::menuIconEdit);
+ 	}
++	addAction( // telegram-custom
++		(Custom::FolderCounterHidden(id)
++			? u"Show unread counter"_q
++			: u"Hide unread counter"_q),
++		[=] { Custom::ToggleFolderCounterHidden(id); },
++		&st::menuIconMarkRead);
+ 	if (state->menu->empty()) {
+ 		state->menu = nullptr;
+ 		return;
+@@ -239,15 +246,17 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
+ 		for (auto i = 0; i < list.size(); i++) {
+ 			rpl::combine(
+ 				Data::UnreadStateValue(session, list[i].id()),
+-				rpl::duplicate(includeMuted)
++				rpl::duplicate(includeMuted),
++				Custom::FolderCounterHiddenValue(list[i].id())
+ 			) | rpl::on_next([=](
+ 					const Dialogs::UnreadState &state,
+-					bool includeMuted) {
++					bool includeMuted,
++					bool hidden) {
+ 				const auto chats = state.chats;
+ 				const auto chatsMuted = state.chatsMuted;
+ 				const auto muted = (chatsMuted + state.marksMuted);
+-				const auto count = (chats + state.marks)
+-					- (includeMuted ? 0 : muted);
++				const auto count = hidden ? 0 : ((chats + state.marks)
++					- (includeMuted ? 0 : muted));
+ 				const auto isMuted = includeMuted && (count == muted);
+ 				slider->setUnreadCount(i, count, isMuted);
+ 				slider->fitWidthToSections();
+diff --git a/Telegram/SourceFiles/window/window_filters_menu.cpp b/Telegram/SourceFiles/window/window_filters_menu.cpp
+index 99448513..b3a9055f 100644
+--- a/Telegram/SourceFiles/window/window_filters_menu.cpp
++++ b/Telegram/SourceFiles/window/window_filters_menu.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "window/window_filters_menu.h"
++#include "custom/custom_settings.h" // telegram-custom
+ 
+ #include "menu/menu_mark_as_read.h"
+ #include "mainwindow.h"
+@@ -604,15 +605,17 @@ base::unique_qptr<Ui::SideBarButton> FiltersMenu::prepareButton(
+ 		}
+ 		rpl::combine(
+ 			Data::UnreadStateValue(&_session->session(), id),
+-			Data::IncludeMutedCounterFoldersValue()
++			Data::IncludeMutedCounterFoldersValue(),
++			Custom::FolderCounterHiddenValue(id)
+ 		) | rpl::on_next([=](
+ 				const Dialogs::UnreadState &state,
+-				bool includeMuted) {
++				bool includeMuted,
++				bool hidden) {
+ 			const auto chats = state.chats;
+ 			const auto chatsMuted = state.chatsMuted;
+ 			const auto muted = (chatsMuted + state.marksMuted);
+-			const auto count = (chats + state.marks)
+-				- (includeMuted ? 0 : muted);
++			const auto count = hidden ? 0 : ((chats + state.marks)
++				- (includeMuted ? 0 : muted));
+ 			const auto string = !count
+ 				? QString()
+ 				: (count > 999)
+@@ -794,6 +797,12 @@ void FiltersMenu::showMenu(QPoint position, FilterId id) {
+ 			crl::guard(&_outer, [=] { openFiltersSettings(); }),
+ 			&st::menuIconEdit);
+ 	}
++	addAction( // telegram-custom
++		(Custom::FolderCounterHidden(id)
++			? u"Show unread counter"_q
++			: u"Hide unread counter"_q),
++		[=] { Custom::ToggleFolderCounterHidden(id); },
++		&st::menuIconMarkRead);
+ 	if (_popupMenu->empty()) {
+ 		_popupMenu = nullptr;
+ 		return;
+-- 
+2.55.0
+
