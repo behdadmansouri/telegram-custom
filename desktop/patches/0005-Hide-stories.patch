@@ -1,7 +1,7 @@
-From a492bdb7197773d165dbb8d949d7adec3091fd36 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Bmans <bmans054@uottawa.ca>
 Date: Wed, 23 Sep 2026 15:05:38 -0400
-Subject: [PATCH 5/5] Hide stories
+Subject: [PATCH] Hide stories
 
 No story rings on avatars (peers report no active/unread stories) and the
 stories strip above the chat list never loads. Profile story sections and

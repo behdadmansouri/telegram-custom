@@ -1,7 +1,7 @@
-From 92c0f2f3e28b119f533ffa1f7ce58ec543f789a4 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Bmans <bmans054@uottawa.ca>
 Date: Wed, 23 Sep 2026 15:02:45 -0400
-Subject: [PATCH 2/3] Hide premium custom emoji sets from the picker without
+Subject: [PATCH] Hide premium custom emoji sets from the picker without
  Premium
 
 ---

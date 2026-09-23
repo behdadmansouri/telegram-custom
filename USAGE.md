@@ -20,5 +20,5 @@
 
 ## ✏️ writing a desktop patch
 1. Edit inside `src/tdesktop-<ver>-full` (a git tree; branch `custom` = upstream + our patches), commit.
-2. `git -C src/tdesktop-<ver>-full format-patch upstream -o ../../desktop/patches` (from the project root: `-o "$PWD/desktop/patches"`).
+2. `git -C src/tdesktop-<ver>-full format-patch -N --zero-commit upstream -o ../../desktop/patches` (from the project root: `-o "$PWD/desktop/patches"`).
 3. `desktop/build.sh` resets the tree and re-applies the whole series, so the patch files are the truth.

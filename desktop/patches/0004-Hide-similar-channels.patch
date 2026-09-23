@@ -1,7 +1,7 @@
-From 7ec57349e2704fe10baf13a0e4059263e7e533ee Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Bmans <bmans054@uottawa.ca>
 Date: Wed, 23 Sep 2026 15:05:38 -0400
-Subject: [PATCH 4/5] Hide similar channels
+Subject: [PATCH] Hide similar channels
 
 Never fetch channel recommendations, so the block after joining, the profile
 button and the profile tab all stay empty (they hide at count 0). Similar
