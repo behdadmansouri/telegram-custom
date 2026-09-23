@@ -1,1 +1,2 @@
 - 2026-09-23: project split out of PC Manager; base switched to stock upstream; stock desktop + Android build pipeline.
+- 2026-09-23: first Android build (stock 12.10.3, own package id + signing key, arm64) from GitHub Actions.
