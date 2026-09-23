@@ -1,0 +1,1 @@
+- 2026-09-23: project split out of PC Manager; base switched to stock upstream; stock desktop + Android build pipeline.

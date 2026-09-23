@@ -1,0 +1,66 @@
+name: android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: custom
+
+      - name: Pin upstream
+        run: echo "UPSTREAM_REF=$(grep -v '^#' custom/android/UPSTREAM | head -1)" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: DrKLO/Telegram
+          ref: ${{ env.UPSTREAM_REF }}
+          path: tg
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Android SDK + NDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" "build-tools;36.0.0" \
+            "ndk;27.2.12479018" "cmake;3.22.1" > /dev/null
+          nproc; free -g
+
+      - name: Customize
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash custom/android/customize.sh tg
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ env.UPSTREAM_REF }}
+
+      - name: Build
+        working-directory: tg
+        run: ./gradlew --no-daemon :TMessagesProj_App:assembleAfatRelease --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tg-custom-android-${{ env.UPSTREAM_REF }}
+          path: tg/TMessagesProj_App/build/outputs/apk/afat/release/*.apk
+          retention-days: 30

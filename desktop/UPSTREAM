@@ -1,0 +1,5 @@
+# Pinned to the version Manjaro stable packages, so it builds against the system libs as-is.
+# Hashes from the Arch PKGBUILD at that tag (gitlab.archlinux.org/archlinux/packaging/packages/telegram-desktop).
+TDESKTOP_VERSION=7.2.5
+TDESKTOP_SHA512=75e876a550eb0815db7448ef19e955b1161391710a46ed17fa71d1258eee6c1a1db520ceb48c623f44f9b76ed579cfb8f7ff9701cd0d700168cfd329267e4e7e
+TD_COMMIT=bc9c263e2bfee06aaab41e82db51a103376030bc

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Build our Telegram Desktop: pinned upstream tarball + desktop/patches, against
+# Manjaro's system libs (the Arch PKGBUILD recipe), installed to its own prefix
+# with its own data dir. Never touches the pacman telegram-desktop.
+#
+# Usage: desktop/build.sh [--fetch-only]
+# Env:   JOBS (default 4), TG_API_ID/TG_API_HASH (or put them in .env)
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(dirname "$here")
+source "$here/UPSTREAM"
+[[ -f $root/.env ]] && source "$root/.env"
+
+ver=$TDESKTOP_VERSION
+src=$root/src
+tree=$src/tdesktop-$ver-full
+td=$src/td
+bld=$root/build/desktop
+prefix=${PREFIX:-$HOME/.local/opt/telegram-custom}
+workdir=$HOME/.local/share/TelegramCustom
+jobs=${JOBS:-4}
+# Official snap key; Arch's package uses it with Telegram's blessing (see the
+# PKGBUILD comment). Own key from .env wins.
+api_id=${TG_API_ID:-611335}
+api_hash=${TG_API_HASH:-d524b414d21f4d37f08684c1df41ac9c}
+
+mkdir -p "$src"
+
+# 1. fetch + verify
+tarball=$src/tdesktop-$ver-full.tar.gz
+if [[ ! -f $tarball ]]; then
+    curl -fL --retry 3 -o "$tarball.part" \
+        "https://github.com/telegramdesktop/tdesktop/releases/download/v$ver/tdesktop-$ver-full.tar.gz"
+    mv "$tarball.part" "$tarball"
+fi
+echo "$TDESKTOP_SHA512  $tarball" | sha512sum -c --quiet
+[[ -d $td ]] || git clone -q https://github.com/tdlib/td.git "$td"
+git -C "$td" checkout -q "$TD_COMMIT"
+[[ ${1:-} == --fetch-only ]] && exit 0
+
+# 2. unpack into a git tree (tag "upstream") so patches are plain git commits
+if [[ ! -d $tree/.git ]]; then
+    tar -C "$src" -xzf "$tarball"
+    git -C "$tree" init -q
+    git -C "$tree" add -A
+    git -C "$tree" -c user.name=upstream -c user.email=upstream@localhost commit -qm "tdesktop $ver"
+    git -C "$tree" tag upstream
+fi
+
+# 3. re-apply the patch series from scratch. Refuse on uncommitted work: that
+#    is a patch being written, export it first (see USAGE.md).
+if [[ -n $(git -C "$tree" status --porcelain) ]]; then
+    echo "error: $tree has uncommitted changes" >&2
+    exit 1
+fi
+git -C "$tree" checkout -q -B custom upstream
+shopt -s nullglob
+patches=("$here"/patches/*.patch)
+if (( ${#patches[@]} )); then
+    git -C "$tree" -c user.name=custom -c user.email=custom@localhost am -q "${patches[@]}"
+fi
+echo "patches: ${#patches[@]}"
+
+# 4. tde2e (end-to-end call encryption lib from tdlib), built once
+if [[ ! -d $td/install ]]; then
+    cmake -S "$td" -B "$td/build" -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$td/install" -Wno-dev -DTD_E2E_ONLY=ON
+    cmake --build "$td/build" -j "$jobs"
+    cmake --install "$td/build"
+fi
+
+# 5. configure + build, memory-capped: the kernel OOM killer here prefers
+#    Electron apps (Claude) over the compiler, see PC Manager oom_kills_claude.md
+cmake -S "$tree" -B "$bld" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -Dtde2e_DIR="$td/install/lib/cmake/tde2e" \
+    -DTDESKTOP_API_ID="$api_id" \
+    -DTDESKTOP_API_HASH="$api_hash"
+systemd-run --user --scope --quiet -p MemoryHigh=7G -p MemoryMax=9G \
+    cmake --build "$bld" -j "$jobs"
+
+# 6. install + launcher with its own data dir (the official client keeps
+#    ~/.local/share/TelegramDesktop)
+cmake --install "$bld" > /dev/null
+mkdir -p "$HOME/.local/share/applications"
+cat > "$HOME/.local/share/applications/telegram-custom.desktop" <<EOF
+[Desktop Entry]
+Name=Telegram Custom
+Comment=Own build of Telegram Desktop
+Exec="$prefix/bin/Telegram" -workdir "$workdir" -- %u
+Icon=org.telegram.desktop
+Terminal=false
+Type=Application
+Categories=Chat;Network;InstantMessaging;Qt;
+StartupWMClass=TelegramDesktop
+EOF
+echo "installed: $prefix/bin/Telegram (data: $workdir)"
