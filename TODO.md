@@ -1,12 +1,12 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
-- [ ] 🤖 **Compile + fix desktop patches** `M`: ads, custom emoji, folder counters, ghost mode, notify delay, purple; never compiled yet
 - [ ] 🤖 **First desktop CI build** `M`: Manjaro container; later builds reuse ccache
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
 ## 🔍 Verification
+- [ ] 🧍 **Desktop: Telegram Custom launches with the purple icon, separate from the official app** - app menu → Telegram Custom. ☰ → Ghost mode; right-click a folder tab → Hide unread counter.
 - [ ] 🧍 **The APK installs next to the official app as TG Custom, purple icon** - GitHub → Actions → android → newest run → artifact. Log in only after the api_id step.
 - [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
