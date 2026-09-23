@@ -83,7 +83,7 @@ command -v ccache > /dev/null && launcher=(
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
 cmake -S "$tree" -B "$bld" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/ \
+    -DCMAKE_INSTALL_PREFIX=/usr \
     "${launcher[@]}" \
     -Dtde2e_DIR="$td/install/lib/cmake/tde2e" \
     -DTDESKTOP_API_ID="$api_id" \

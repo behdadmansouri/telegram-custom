@@ -32,6 +32,7 @@ case ${1:?usage: install.sh <stage-dir> | --from-ci | --rollback} in
     stage=$1 ;;
 esac
 
+[[ -n $stage && -d $stage/usr ]] && stage=$stage/usr   # cmake installs under /usr
 if [[ -z ${rollback:-} ]]; then
     [[ -x $stage/bin/Telegram ]] || { echo "no bin/Telegram in $stage" >&2; exit 1; }
     mkdir -p "$(dirname "$prefix")"
