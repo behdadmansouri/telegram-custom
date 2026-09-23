@@ -11,7 +11,6 @@
 - [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
 ## 🤔 Needs your call
-- [ ] 🧍 **Get own api_id** `S`: my.telegram.org → API development tools; then put both values in `.env` and tell me (I set the GitHub secrets)
 - [ ] 🧍 **Back up `.secrets/`** `S`: the Android signing key; lose it and every update needs an uninstall
 - [ ] 🧍 **Spy essentials: encrypt the saved deleted messages?** `S` `think`: my pick is encrypted under the local passcode (AyuGram keeps them in plaintext)
 

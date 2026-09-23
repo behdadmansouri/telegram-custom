@@ -2,3 +2,4 @@
 - 2026-09-23: first Android build (stock 12.10.3, own package id + signing key, arm64) from GitHub Actions.
 - 2026-09-23: Android feature patches: no ads, unusable emoji hidden, per-folder counters, ghost mode (Settings row), purple launcher icon.
 - 2026-09-23: first desktop build installed locally (7.2.5 + no ads, unusable emoji hidden, per-folder counters, ghost mode, no notify delay, purple logo, own app id).
+- 2026-09-23: builds switched to own api_id (secrets + .env).

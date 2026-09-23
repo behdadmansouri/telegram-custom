@@ -53,7 +53,6 @@ What *is* in reach:
 
 ## 🔑 api_id
 
-Builds use the official keys now (desktop: the snap key Arch's package uses; Android: upstream's
-default). Telegram's terms want third-party clients on their own `api_id`; the official key blends in
-with every stock install. No verified reports of bans either way. Switch = put `TG_API_ID`/`TG_API_HASH`
-in `.env` and in the repo's secrets, rebuild; sessions made with one key may need a fresh login.
+Own api_id since 2026-09-23: in `.env` (local builds) and repo secrets `TG_API_ID`/`TG_API_HASH`
+(CI). Without them the builds fall back to the official keys. Changing it is a compile definition on
+the whole desktop target, so it forces a full rebuild once.
