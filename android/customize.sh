@@ -18,6 +18,39 @@ for p in "$here"/patches/*.patch; do
     git apply --whitespace=nowarn "$p"
 done
 
+# Purple launcher icon, same hue rotation as desktop/purple.py. Release uses
+# @mipmap/ic_launcher(_round): the legacy PNGs, and on API 26+ the adaptive
+# icon whose blue is the gradient in drawable/icon_background_sa.xml. The
+# foreground plane, the shading overlay and the monochrome layer are white or
+# themed and stay.
+python3 - "$here/../desktop" <<'EOF'
+import glob, os, re, sys, tempfile
+sys.path.insert(0, sys.argv[1])
+from PIL import Image
+from purple import rotate
+
+res = "TMessagesProj/src/main/res/"
+pngs = sorted(glob.glob(res + "mipmap-*/ic_launcher.png") + glob.glob(res + "mipmap-*/ic_launcher_round.png"))
+assert pngs and all(rotate(p) > 0 for p in pngs), "launcher PNGs missing or not blue"
+
+def rot_hex(h):  # one pixel through rotate(), so the math is the same
+    fd, tmp = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    Image.new("RGBA", (1, 1), "#" + h).save(tmp)
+    rotate(tmp)
+    r, g, b, _ = Image.open(tmp).getpixel((0, 0))
+    os.remove(tmp)
+    return "%02X%02X%02X" % (r, g, b)
+
+f = res + "drawable/icon_background_sa.xml"
+s = open(f).read()
+t = re.sub(r'(android:(?:start|end)Color=")#([0-9A-Fa-f]{6})"',
+           lambda m: m.group(1) + "#" + rot_hex(m.group(2)) + '"', s)
+assert t != s, f + ": no gradient colors found"
+open(f, "w").write(t)
+print(f"icon: {len(pngs)} PNGs + adaptive background rotated purple")
+EOF
+
 # Own package id so it installs next to the Play Store Telegram.
 sed -i "s/^APP_PACKAGE=.*/APP_PACKAGE=$pkg/" gradle.properties
 

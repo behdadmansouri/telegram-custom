@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 17:12:21 -0400
+Subject: [PATCH] Hide premium custom emoji sets from the picker without
+ Premium
+
+Without Premium, EmojiView no longer lists the locked (premium) part of
+installed emoji sets or featured sets containing premium emoji. Free sets,
+the free part of mixed sets, and the group's emoji set stay.
+---
+ .../src/main/java/org/telegram/ui/Components/EmojiView.java    | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+index 7d620f71..2b38c203 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
+@@ -7569,7 +7569,7 @@ public class EmojiView extends FrameLayout implements
+                         pack.expanded = true;
+                         emojipacksProcessed.add(pack);
+                     }
+-                    if (premiumEmojis.size() > 0) {
++                    if (false && premiumEmojis.size() > 0) { // telegram-custom: hide locked emoji instead of showing them locked
+                         EmojiPack pack = new EmojiPack();
+                         pack.index = index++;
+                         pack.set = set.set;
+@@ -7613,6 +7613,7 @@ public class EmojiView extends FrameLayout implements
+                         break;
+                     }
+                 }
++                if (premium && !isPremium) continue; // telegram-custom: hide sets we can't send
+                 pack.free = !premium;
+                 pack.expanded = expandedEmojiSets.contains(pack.set.id);
+                 pack.featured = true;
+-- 
+2.55.0
+

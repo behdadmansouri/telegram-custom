@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 17:11:43 -0400
+Subject: [PATCH] No ads: sponsored messages, search ads, promoted chat
+
+Short-circuits messages.getSponsoredMessages (chat list + video ads),
+contacts.getSponsoredPeers in search, and drops the help.getPromoData peer
+so no proxy-sponsor/promoted chat is ever pinned.
+---
+ .../main/java/org/telegram/messenger/MessagesController.java    | 2 ++
+ .../src/main/java/org/telegram/messenger/video/VideoAds.java    | 1 +
+ .../java/org/telegram/ui/Adapters/DialogsSearchAdapter.java     | 2 +-
+ 3 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+index 7a0b35b1..e01bc9a8 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesController.java
+@@ -10894,6 +10894,7 @@ public class MessagesController extends BaseController implements NotificationCe
+                 noDialog = true;
+             } else if (response instanceof TLRPC.TL_help_promoData) {
+                 TLRPC.TL_help_promoData res = (TLRPC.TL_help_promoData) response;
++                res.peer = null; // telegram-custom: no promoted chat
+ 
+                 long did;
+                 if (res.peer == null) {
+@@ -21610,6 +21611,7 @@ public class MessagesController extends BaseController implements NotificationCe
+     }
+ 
+     public SponsoredMessagesInfo getSponsoredMessages(long dialogId) {
++        if (true) return null; // telegram-custom: no ads
+         SponsoredMessagesInfo info = sponsoredMessages.get(dialogId);
+         if (info != null && (info.loading || Math.abs(SystemClock.elapsedRealtime() - info.loadTime) <= 5 * 60 * 1000)) {
+             return info;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/video/VideoAds.java b/TMessagesProj/src/main/java/org/telegram/messenger/video/VideoAds.java
+index e8ea5120..0e633205 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/video/VideoAds.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/video/VideoAds.java
+@@ -181,6 +181,7 @@ public class VideoAds {
+     private boolean loading, loaded;
+     private void load() {
+         if (loading || loaded) return;
++        if (true) return; // telegram-custom: no ads
+ 
+         if (UserConfig.getInstance(currentAccount).isPremium() && MessagesController.getInstance(currentAccount).isSponsoredDisabled()) {
+             return;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+index 6e17b577..b9e766b2 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsSearchAdapter.java
+@@ -1113,7 +1113,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
+                 ConnectionsManager.getInstance(currentAccount).cancelRequest(sponsoredReqId, true);
+                 sponsoredReqId = 0;
+             }
+-            if (query == null || query.length() < 4 || UserConfig.getInstance(currentAccount).isPremium() && MessagesController.getInstance(currentAccount).isSponsoredDisabled()) {
++            if (true || query == null || query.length() < 4 || UserConfig.getInstance(currentAccount).isPremium() && MessagesController.getInstance(currentAccount).isSponsoredDisabled()) { // telegram-custom: no search ads
+                 sponsoredQuery = null;
+             } else {
+                 final TLRPC.TL_contacts_getSponsoredPeers req = new TLRPC.TL_contacts_getSponsoredPeers();
+-- 
+2.55.0
+

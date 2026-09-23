@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['android/**', '.github/workflows/android.yml']
+    paths: ['android/**', 'desktop/purple.py', '.github/workflows/android.yml']
 
 jobs:
   build:
@@ -47,6 +47,9 @@ jobs:
             "platforms;android-36" "build-tools;36.0.0" \
             "ndk;27.2.12479018" "cmake;3.22.1" > /dev/null
           nproc; free -g
+
+      - name: Icon deps
+        run: python3 -c 'import PIL, numpy' 2>/dev/null || python3 -m pip install --user --break-system-packages pillow numpy
 
       - name: Customize
         env:

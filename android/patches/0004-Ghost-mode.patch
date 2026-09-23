@@ -1,0 +1,171 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 17:17:04 -0400
+Subject: [PATCH] Ghost mode
+
+Settings -> Ghost mode (one tap, off by default, all accounts). While on: no
+read receipts (chats, threads, voice/video listened, secret chats, stories),
+no story view increments, no typing/upload status, always reports offline,
+channel views fetched without incrementing. One filter in
+ConnectionsManager.sendRequestInternal; dropped requests' callbacks get an
+error. Reads are also dropped for 10s after turning it off, so reads queued
+while on (MessagesController delays them up to 5s) don't leak. Sending a
+message still shows you online for a moment (server-side).
+---
+ .../telegram/messenger/CustomSettings.java    | 96 +++++++++++++++++++
+ .../telegram/tgnet/ConnectionsManager.java    |  3 +
+ .../org/telegram/ui/SettingsActivity.java     |  5 +
+ 3 files changed, 104 insertions(+)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+index a5be5540..5014cc59 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+@@ -2,6 +2,15 @@ package org.telegram.messenger;
+ 
+ import android.content.Context;
+ import android.content.SharedPreferences;
++import android.os.SystemClock;
++
++import org.telegram.tgnet.ConnectionsManager;
++import org.telegram.tgnet.RequestDelegate;
++import org.telegram.tgnet.RequestDelegateTimestamp;
++import org.telegram.tgnet.TLObject;
++import org.telegram.tgnet.TLRPC;
++import org.telegram.tgnet.tl.TL_account;
++import org.telegram.tgnet.tl.TL_stories;
+ 
+ import java.util.Collections;
+ import java.util.HashSet;
+@@ -33,4 +42,91 @@ public class CustomSettings {
+         }
+         prefs().edit().putStringSet(hiddenCountersKey(account), set).apply();
+     }
++
++    // Ghost mode (all accounts): no read receipts (chats, threads, voice/video
++    // listened, secret chats, stories), no story view increments, no
++    // typing/upload status, always offline, channel views fetched without
++    // incrementing. Filtered centrally in ConnectionsManager.sendRequestInternal.
++    // Sending a message still shows you online for a moment (server-side).
++    private static volatile Boolean ghostMode;
++    private static volatile long ghostOffAt;
++    // Reads queued while ghost was on (MessagesController delays them up to
++    // 5s) must not go out right after it is turned off.
++    private static final long GHOST_READ_GRACE_MS = 10000;
++
++    public static boolean isGhostMode() {
++        Boolean value = ghostMode;
++        if (value == null) {
++            ghostMode = value = prefs().getBoolean("ghostMode", false);
++        }
++        return value;
++    }
++
++    public static void setGhostMode(boolean enabled) {
++        if (!enabled && isGhostMode()) {
++            ghostOffAt = SystemClock.elapsedRealtime();
++        }
++        ghostMode = enabled;
++        prefs().edit().putBoolean("ghostMode", enabled).apply();
++        if (enabled) {
++            for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
++                if (UserConfig.getInstance(a).isClientActivated()) {
++                    TL_account.updateStatus req = new TL_account.updateStatus();
++                    req.offline = true;
++                    ConnectionsManager.getInstance(a).sendRequest(req, null);
++                }
++            }
++        }
++    }
++
++    private static boolean isGhostRead(TLObject object) {
++        return object instanceof TLRPC.TL_messages_readHistory
++            || object instanceof TLRPC.TL_channels_readHistory
++            || object instanceof TLRPC.TL_messages_readDiscussion
++            || object instanceof TLRPC.TL_messages_readMessageContents
++            || object instanceof TLRPC.TL_channels_readMessageContents
++            || object instanceof TLRPC.TL_messages_readEncryptedHistory
++            || object instanceof TL_stories.TL_stories_readStories
++            || object instanceof TL_stories.TL_stories_incrementStoryViews;
++    }
++
++    // Called for every outgoing request before it is serialized. Returns true
++    // when the request is dropped; its callback then gets an error (on the
++    // stage queue, like a real answer) so no caller waits forever.
++    public static boolean ghostFilter(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp) {
++        final boolean ghost = isGhostMode();
++        final boolean drop;
++        if (isGhostRead(object)) {
++            drop = ghost || SystemClock.elapsedRealtime() - ghostOffAt < GHOST_READ_GRACE_MS && ghostOffAt != 0;
++        } else if (!ghost) {
++            return false;
++        } else if (object instanceof TL_account.updateStatus) {
++            ((TL_account.updateStatus) object).offline = true;
++            return false;
++        } else if (object instanceof TLRPC.TL_messages_getMessagesViews) {
++            ((TLRPC.TL_messages_getMessagesViews) object).increment = false;
++            return false;
++        } else {
++            // Voice-chat "speaking" stays: it's the call itself, not presence.
++            drop = object instanceof TLRPC.TL_messages_setTyping
++                    && !(((TLRPC.TL_messages_setTyping) object).action instanceof TLRPC.TL_speakingInGroupCallAction)
++                || object instanceof TLRPC.TL_messages_setEncryptedTyping;
++        }
++        if (!drop) {
++            return false;
++        }
++        if (onComplete != null || onCompleteTimestamp != null) {
++            final TLRPC.TL_error error = new TLRPC.TL_error();
++            error.code = 400;
++            error.text = "GHOST_MODE";
++            Utilities.stageQueue.postRunnable(() -> {
++                if (onComplete != null) {
++                    onComplete.run(null, error);
++                } else {
++                    onCompleteTimestamp.run(null, error, 0);
++                }
++            });
++        }
++        return true;
++    }
+ }
+diff --git a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+index 905bdcc6..1d5787d0 100644
+--- a/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
++++ b/TMessagesProj/src/main/java/org/telegram/tgnet/ConnectionsManager.java
+@@ -394,6 +394,9 @@ public class ConnectionsManager extends BaseController {
+     }
+ 
+     private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
++        if (org.telegram.messenger.CustomSettings.ghostFilter(object, onComplete, onCompleteTimestamp)) { // telegram-custom: ghost mode
++            return;
++        }
+         if (BuildVars.LOGS_ENABLED) {
+             FileLog.d("send request " + object + " with token = " + requestToken);
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index cbfb369a..59c2289a 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -697,6 +697,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         items.add(SettingCell.Factory.of(8, IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom, R.drawable.settings_devices, getString(R.string.SettingsDevices), getString(R.string.SettingsDevicesInfo)));
+         items.add(SettingCell.Factory.of(9, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.settings_power, getString(R.string.SettingsPowerSaving), getString(R.string.SettingsPowerSavingInfo)));
+         items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
++        items.add(SettingCell.Factory.of(100, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_stories_stealth, "Ghost mode", "No read receipts, typing or online status", org.telegram.messenger.CustomSettings.isGhostMode() ? "On" : "Off")); // telegram-custom
+ 
+         items.add(UItem.asShadow(null));
+ 
+@@ -836,6 +837,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+             case 10:
+                 presentSettingFragment(new LanguageSelectActivity());
+                 break;
++            case 100: // telegram-custom: ghost mode toggle
++                org.telegram.messenger.CustomSettings.setGhostMode(!org.telegram.messenger.CustomSettings.isGhostMode());
++                listView.adapter.update(true);
++                break;
+ 
+             case 11:
+                 presentSettingFragment(new PremiumPreviewFragment("settings"));
+-- 
+2.55.0
+

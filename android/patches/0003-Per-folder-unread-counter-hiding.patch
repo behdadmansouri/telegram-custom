@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 17:13:41 -0400
+Subject: [PATCH] Per-folder unread counter hiding
+
+Long-press a folder tab -> Hide/Show unread counter. Stored per account in
+the telegram_custom SharedPreferences via a new CustomSettings class that
+later patches reuse. "All chats" is filter id 0.
+---
+ .../telegram/messenger/CustomSettings.java    | 36 +++++++++++++++++++
+ .../java/org/telegram/ui/DialogsActivity.java |  7 ++++
+ 2 files changed, 43 insertions(+)
+ create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+new file mode 100644
+index 00000000..a5be5540
+--- /dev/null
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+@@ -0,0 +1,36 @@
++package org.telegram.messenger;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.Set;
++
++// telegram-custom: our own settings, in their own SharedPreferences file so
++// they never touch upstream's settings code (keeps rebases trivial).
++public class CustomSettings {
++
++    private static SharedPreferences prefs() {
++        return ApplicationLoader.applicationContext.getSharedPreferences("telegram_custom", Context.MODE_PRIVATE);
++    }
++
++    // Folders whose unread badge is hidden, by DialogFilter.id per account
++    // (toggled from the folder tab's long-press menu). 0 is "All chats".
++    private static String hiddenCountersKey(int account) {
++        return "hiddenFolderCounters" + account;
++    }
++
++    public static boolean isFolderCounterHidden(int account, int filterId) {
++        return prefs().getStringSet(hiddenCountersKey(account), Collections.emptySet()).contains(String.valueOf(filterId));
++    }
++
++    public static void toggleFolderCounterHidden(int account, int filterId) {
++        Set<String> set = new HashSet<>(prefs().getStringSet(hiddenCountersKey(account), Collections.emptySet()));
++        String id = String.valueOf(filterId);
++        if (!set.remove(id)) {
++            set.add(id);
++        }
++        prefs().edit().putStringSet(hiddenCountersKey(account), set).apply();
++    }
++}
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+index b04f149f..c7f17bec 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/DialogsActivity.java
+@@ -105,6 +105,7 @@ import org.telegram.messenger.BotWebViewVibrationEffect;
+ import org.telegram.messenger.BuildVars;
+ import org.telegram.messenger.ChatObject;
+ import org.telegram.messenger.ContactsController;
++import org.telegram.messenger.CustomSettings; // telegram-custom
+ import org.telegram.messenger.DialogObject;
+ import org.telegram.messenger.Emoji;
+ import org.telegram.messenger.FileLoader;
+@@ -3676,12 +3677,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                         return 0;
+                     }
+                     if (tabId == filterTabsView.getDefaultTabId()) {
++                        if (CustomSettings.isFolderCounterHidden(currentAccount, 0)) return 0; // telegram-custom
+                         return getMessagesStorage().getMainUnreadCount();
+                     }
+                     ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
+                     if (tabId < 0 || tabId >= dialogFilters.size()) {
+                         return 0;
+                     }
++                    if (CustomSettings.isFolderCounterHidden(currentAccount, dialogFilters.get(tabId).id)) return 0; // telegram-custom
+                     return getMessagesController().getDialogFilters().get(tabId).unreadCount;
+                 }
+ 
+@@ -3818,6 +3821,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
+                             .addIf(hasUnread, R.drawable.msg_markread, LocaleController.getString(R.string.MarkAllAsRead), () -> {
+                                 markDialogsAsRead(dialogs);
+                             })
++                            .add(R.drawable.msg_markunread, CustomSettings.isFolderCounterHidden(currentAccount, defaultTab ? 0 : dialogFilter.id) ? "Show unread counter" : "Hide unread counter", () -> { // telegram-custom
++                                CustomSettings.toggleFolderCounterHidden(currentAccount, defaultTab ? 0 : dialogFilter.id);
++                                filterTabsView.checkTabsCounter();
++                            })
+                             .addIf(hasShare, R.drawable.msg_share, FilterCreateActivity.withNew(filter != null && filter.isMyChatlist() ? -1 : 0, LocaleController.getString(R.string.LinkActionShare), true), () -> {
+                                 if (shareEmpty[0]) {
+                                     presentFragment(new FilterChatlistActivity(finalFilter, null));
+-- 
+2.55.0
+
