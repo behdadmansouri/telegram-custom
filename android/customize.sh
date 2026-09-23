@@ -45,6 +45,7 @@ s = open(f).read()
 s = re.sub(r'(afat \{\s*ndk \{\s*abiFilters )[^\n]*', r'\1"arm64-v8a"', s, count=1)
 open(f, "w").write(s)
 EOF
+grep -m1 -A2 '^        afat {' TMessagesProj_App/build.gradle | grep abiFilters
 
 # Launcher label, so it can't be mistaken for the official app.
 sed -i 's|<string name="AppName">Telegram</string>|<string name="AppName">TG Custom</string>|' \
