@@ -4,7 +4,8 @@
 # with its own data dir. Never touches the pacman telegram-desktop.
 #
 # Usage: desktop/build.sh [--fetch-only]
-# Env:   JOBS (default 4), TG_API_ID/TG_API_HASH (or put them in .env)
+# Env:   JOBS (default 4), TG_API_ID/TG_API_HASH (or put them in .env),
+#        KEEP_GOING=1 to collect every compile error in one run
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -87,11 +88,13 @@ cmake -S "$tree" -B "$bld" -G Ninja \
     -Dtde2e_DIR="$td/install/lib/cmake/tde2e" \
     -DTDESKTOP_API_ID="$api_id" \
     -DTDESKTOP_API_HASH="$api_hash"
+keep=()
+[[ -n ${KEEP_GOING:-} ]] && keep=(-- -k 0)
 if [[ -n ${CI:-} ]]; then
-    cmake --build "$bld" -j "$jobs"
+    cmake --build "$bld" -j "$jobs" "${keep[@]}"
 else
     systemd-run --user --scope --quiet -p MemoryHigh=7G -p MemoryMax=9G \
-        cmake --build "$bld" -j "$jobs"
+        cmake --build "$bld" -j "$jobs" "${keep[@]}"
 fi
 
 # 6. stage the install; locally, swap it in (desktop/install.sh keeps the

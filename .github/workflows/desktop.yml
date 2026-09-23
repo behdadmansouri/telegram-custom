@@ -55,7 +55,7 @@ jobs:
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
         run: |
           git config --global --add safe.directory '*'
-          JOBS=$(nproc) desktop/build.sh
+          KEEP_GOING=1 JOBS=$(nproc) desktop/build.sh
           ccache -s | head -8
 
       - name: Package
