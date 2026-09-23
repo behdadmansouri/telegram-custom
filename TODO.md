@@ -4,8 +4,7 @@
 - [ ] 🧍 **Install desktop build deps** `S`: one `pacman` line, in [USAGE.md](USAGE.md); unblocks the first desktop build
 - [ ] 🤖 **First stock desktop build** `M`: `desktop/build.sh` once deps are in
 - [ ] 🤖 **First stock Android build** `M`: CI run on push; fix whatever breaks
-- [ ] 🤖 **Desktop cheap patches** `M`: ads, custom emoji, per-folder counters, similar channels, stories written (0001-0005), not compiled yet (plan phase 2)
-- [ ] 🤖 **Desktop ghost mode** `M`: plan phase 3
+- [ ] 🤖 **Compile + fix desktop patches 0001-0006** `M`: ads, custom emoji, per-folder counters, similar channels, stories, ghost mode; written, apply cleanly, never compiled
 
 ## 🤔 Needs your call
 - [ ] 🧍 **Own api_id?** `S` `think`: builds use official keys for now; tradeoff in [docs/plan.md](docs/plan.md)
