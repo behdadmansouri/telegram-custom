@@ -2,14 +2,15 @@
 
 ## ⚡ Next up
 - [ ] 🤖 **First stock Android build** `M`: CI run on push; fix whatever breaks
-- [ ] 🤖 **Compile + fix desktop patches 0001-0006** `M`: ads, custom emoji, per-folder counters, similar channels, stories, ghost mode; written, apply cleanly, never compiled
+- [ ] 🤖 **Compile + fix desktop patches** `M`: ads, custom emoji, folder counters, ghost mode, notify delay, purple; never compiled yet
+- [ ] 🤖 **First desktop CI build** `M`: Manjaro container; later builds reuse ccache
+- [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
+- [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
 ## 🤔 Needs your call
-- [ ] 🧍 **Own api_id?** `S` `think`: builds use official keys for now; tradeoff in [docs/plan.md](docs/plan.md)
+- [ ] 🧍 **Get own api_id** `S`: my.telegram.org → API development tools; then put both values in `.env` and tell me (I set the GitHub secrets)
 - [ ] 🧍 **Back up `.secrets/`** `S`: the Android signing key; lose it and every update needs an uninstall
-
-- [ ] 🧍 **Stories + similar channels: hide them?** `S`: assumed yes; say if you meant keep
-- [ ] 🧍 **Spy essentials: where do deleted messages live?** `M` `think`: inside the passcode-encrypted data, or skip; plan phase 6
+- [ ] 🧍 **Spy essentials: encrypt the saved deleted messages?** `S` `think`: my pick is encrypted under the local passcode (AyuGram keeps them in plaintext)
 
 ## 📋 Backlog
 - [ ] 🤖 **Hardening patches** `M`: no link-preview fetch while typing, local-only drafts (plan phase 4)

@@ -1,0 +1,30 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 15:19:46 -0400
+Subject: [PATCH] No notification delay
+
+Stock waits a few seconds (server config) when another device is online, to
+skip notifying for messages read there. Notify immediately instead.
+---
+ Telegram/SourceFiles/window/notifications_manager.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/Telegram/SourceFiles/window/notifications_manager.cpp b/Telegram/SourceFiles/window/notifications_manager.cpp
+index bb61be2b..be924c87 100644
+--- a/Telegram/SourceFiles/window/notifications_manager.cpp
++++ b/Telegram/SourceFiles/window/notifications_manager.cpp
+@@ -400,7 +400,10 @@ System::Timing System::countTiming(
+ 	const bool isOnline = updates.lastWasOnline();
+ 	const auto otherNotOld = ((cOtherOnline() * 1000LL) + config.onlineCloudTimeout > t * 1000LL);
+ 	const bool otherLaterThanMe = (cOtherOnline() * 1000LL + (ms - updates.lastSetOnline()) > t * 1000LL);
+-	if (!isOnline && otherNotOld && otherLaterThanMe) {
++	if (true) {
++		// telegram-custom: notify right away instead of waiting to see
++		// whether another online device reads it first.
++	} else if (!isOnline && otherNotOld && otherLaterThanMe) {
+ 		delay = config.notifyCloudDelay;
+ 	} else if (cOtherOnline() >= t) {
+ 		delay = config.notifyDefaultDelay;
+-- 
+2.55.0
+

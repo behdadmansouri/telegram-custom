@@ -20,8 +20,6 @@ src=$cache/src
 tree=$src/tdesktop-$ver-full
 td=$src/td
 bld=$cache/build/desktop
-prefix=${PREFIX:-$HOME/.local/opt/telegram-custom}
-workdir=$HOME/.local/share/TelegramCustom
 jobs=${JOBS:-4}
 # Official snap key; Arch's package uses it with Telegram's blessing (see the
 # PKGBUILD comment). Own key from .env wins.
@@ -73,30 +71,29 @@ if [[ ! -d $td/install ]]; then
     cmake --install "$td/build"
 fi
 
-# 5. configure + build, memory-capped: the kernel OOM killer here prefers
-#    Electron apps (Claude) over the compiler, see PC Manager oom_kills_claude.md
+# 5. configure + build. Locally memory-capped: the kernel OOM killer here
+#    prefers Electron apps (Claude) over the compiler, see PC Manager
+#    oom_kills_claude.md. ccache when present (CI always has it).
+launcher=()
+command -v ccache > /dev/null && launcher=(
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
 cmake -S "$tree" -B "$bld" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DCMAKE_INSTALL_PREFIX=/ \
+    "${launcher[@]}" \
     -Dtde2e_DIR="$td/install/lib/cmake/tde2e" \
     -DTDESKTOP_API_ID="$api_id" \
     -DTDESKTOP_API_HASH="$api_hash"
-systemd-run --user --scope --quiet -p MemoryHigh=7G -p MemoryMax=9G \
+if [[ -n ${CI:-} ]]; then
     cmake --build "$bld" -j "$jobs"
+else
+    systemd-run --user --scope --quiet -p MemoryHigh=7G -p MemoryMax=9G \
+        cmake --build "$bld" -j "$jobs"
+fi
 
-# 6. install + launcher with its own data dir (the official client keeps
-#    ~/.local/share/TelegramDesktop)
-cmake --install "$bld" > /dev/null
-mkdir -p "$HOME/.local/share/applications"
-cat > "$HOME/.local/share/applications/telegram-custom.desktop" <<EOF
-[Desktop Entry]
-Name=Telegram Custom
-Comment=Own build of Telegram Desktop
-Exec="$prefix/bin/Telegram" -workdir "$workdir" -- %u
-Icon=org.telegram.desktop
-Terminal=false
-Type=Application
-Categories=Chat;Network;InstantMessaging;Qt;
-StartupWMClass=TelegramDesktop
-EOF
-echo "installed: $prefix/bin/Telegram (data: $workdir)"
+# 6. stage the install; locally, swap it in (desktop/install.sh keeps the
+#    previous build for rollback). CI tars the stage instead.
+stage=$cache/stage
+rm -rf "$stage"
+DESTDIR="$stage" cmake --install "$bld" > /dev/null
+[[ -n ${CI:-} ]] || "$here/install.sh" "$stage"

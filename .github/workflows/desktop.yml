@@ -1,0 +1,68 @@
+name: desktop
+
+# Builds in a Manjaro container against Manjaro stable's own libs, so the
+# binary runs on an up-to-date Manjaro stable machine (same recipe as a local
+# desktop/build.sh). Install on the laptop with: desktop/install.sh --from-ci
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    container: manjarolinux/base:latest
+    env:
+      CI: 'true'
+      TG_CUSTOM_CACHE: /tmp/tgc
+      CCACHE_DIR: /tmp/ccache
+      # tdesktop uses precompiled headers; ccache needs these to hit.
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
+      CCACHE_MAXSIZE: 3G
+    steps:
+      - name: Toolchain + libs
+        run: |
+          pacman-key --init > /dev/null
+          pacman-key --populate archlinux manjaro > /dev/null
+          pacman -Sy --noconfirm --needed archlinux-keyring manjaro-keyring > /dev/null
+          pacman-mirrors --get-branch || true
+          # runtime + build deps from the Arch PKGBUILD at the pinned tag
+          pacman -Syu --noconfirm --needed base-devel ccache \
+            abseil-cpp ada ffmpeg glib2 hunspell kcoreaddons libavif libfido2 libheif \
+            libjpeg-turbo libjxl libpipewire libsrtp libxcb libxcomposite libxdamage \
+            libxext libxfixes libxkbcommon libxrandr libxtst lz4 minizip openal openh264 \
+            openssl pipewire qt6-base qt6-imageformats qt6-svg qt6-wayland rnnoise xxhash \
+            zlib boost boost-libs cmake git glib2-devel gobject-introspection \
+            qt6-shadertools gperf libtg_owt microsoft-gsl ninja python range-v3 \
+            tl-expected vulkan-headers > /dev/null
+          pacman -Q qt6-base ffmpeg libtg_owt
+          nproc; free -g; df -h /
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: /tmp/ccache
+          key: ccache-${{ hashFiles('desktop/UPSTREAM') }}-${{ github.sha }}
+          restore-keys: ccache-${{ hashFiles('desktop/UPSTREAM') }}-
+
+      - name: Build
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          git config --global --add safe.directory '*'
+          JOBS=$(nproc) desktop/build.sh
+          ccache -s | head -8
+
+      - name: Package
+        run: tar -C /tmp/tgc/stage -czf telegram-custom.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: telegram-custom-desktop
+          path: telegram-custom.tar.gz
+          retention-days: 30
