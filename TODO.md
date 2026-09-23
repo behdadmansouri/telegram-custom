@@ -7,7 +7,8 @@
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
 ## 🔍 Verification
-- [ ] 🧍 **The APK installs next to the official app as TG Custom** - GitHub → Actions → android → newest run → artifact. Log in only after the api_id step.
+- [ ] 🧍 **The APK installs next to the official app as TG Custom, purple icon** - GitHub → Actions → android → newest run → artifact. Log in only after the api_id step.
+- [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
 ## 🤔 Needs your call
 - [ ] 🧍 **Get own api_id** `S`: my.telegram.org → API development tools; then put both values in `.env` and tell me (I set the GitHub secrets)
@@ -16,5 +17,4 @@
 
 ## 📋 Backlog
 - [ ] 🤖 **Hardening patches** `M`: no link-preview fetch while typing, local-only drafts (plan phase 4)
-- [ ] 🤖 **Android feature patches** `L`: ads, custom emoji, folder counters, ghost mode, purple logo (plan phase 5)
 - [ ] 🤖 **Update script** `M`: bump `*/UPSTREAM` to the newest upstream, rebuild, report patches that no longer apply
