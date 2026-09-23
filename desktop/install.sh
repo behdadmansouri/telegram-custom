@@ -17,8 +17,8 @@ case ${1:?usage: install.sh <stage-dir> | --from-ci | --rollback} in
     mv "$prefix" "$prefix.rollback-tmp"
     mv "$prefix.prev" "$prefix"
     mv "$prefix.rollback-tmp" "$prefix.prev"
-    echo "rolled back (the build you left is now $prefix.prev)"
-    exit 0 ;;
+    rollback=1
+    stage= ;;
 --from-ci)
     dl=$(mktemp -d)
     trap 'rm -rf "$dl"' EXIT
@@ -32,23 +32,39 @@ case ${1:?usage: install.sh <stage-dir> | --from-ci | --rollback} in
     stage=$1 ;;
 esac
 
-[[ -x $stage/bin/Telegram ]] || { echo "no bin/Telegram in $stage" >&2; exit 1; }
-mkdir -p "$(dirname "$prefix")"
-rm -rf "$prefix.prev"
-[[ -d $prefix ]] && mv "$prefix" "$prefix.prev"
-cp -a "$stage" "$prefix"
+if [[ -z ${rollback:-} ]]; then
+    [[ -x $stage/bin/Telegram ]] || { echo "no bin/Telegram in $stage" >&2; exit 1; }
+    mkdir -p "$(dirname "$prefix")"
+    rm -rf "$prefix.prev"
+    [[ -d $prefix ]] && mv "$prefix" "$prefix.prev"
+    cp -a "$stage" "$prefix"
+fi
 
-# Own data dir: the official client keeps ~/.local/share/TelegramDesktop.
+# Launcher + icons under our own app id (patch "Own Linux app id"), so the
+# shell shows our purple icon, not the official client's. Own data dir: the
+# official client keeps ~/.local/share/TelegramDesktop.
+id=org.telegram.desktop.custom
+icons=$HOME/.local/share/icons/hicolor
+for png in "$prefix"/share/icons/hicolor/*/apps/org.telegram.desktop.png; do
+    size=$(basename "$(dirname "$(dirname "$png")")")
+    mkdir -p "$icons/$size/apps"
+    cp "$png" "$icons/$size/apps/$id.png"
+done
+touch "$icons"
+rm -f "$HOME/.local/share/applications/telegram-custom.desktop"   # pre-app-id launcher
 mkdir -p "$HOME/.local/share/applications"
-cat > "$HOME/.local/share/applications/telegram-custom.desktop" <<DESKTOP
+cat > "$HOME/.local/share/applications/$id.desktop" <<DESKTOP
 [Desktop Entry]
 Name=Telegram Custom
 Comment=Own build of Telegram Desktop
 Exec="$prefix/bin/Telegram" -workdir "$workdir" -- %u
-Icon=org.telegram.desktop
+Icon=$id
 Terminal=false
 Type=Application
 Categories=Chat;Network;InstantMessaging;Qt;
-StartupWMClass=TelegramDesktop
 DESKTOP
-echo "installed: $prefix/bin/Telegram (data: $workdir; previous build: $prefix.prev)"
+if [[ -n ${rollback:-} ]]; then
+    echo "rolled back (the build you left is now $prefix.prev)"
+else
+    echo "installed: $prefix/bin/Telegram (data: $workdir; previous build: $prefix.prev)"
+fi

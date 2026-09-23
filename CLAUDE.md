@@ -14,7 +14,10 @@ learned from AyuGram. Split out of `PC Manager ⚙️/` 2026-09-23.
   `.prev`), data in `~/.local/share/TelegramCustom`; the pacman `telegram-desktop` stays as fallback.
 - **Source/build trees live in `~/.cache/telegram-custom`**, never under this folder: the space in
   "AI Projects" breaks gobject-introspection's libtool step.
-- **Stories and similar channels stay visible** (user, 2026-09-23); the hide patches were dropped.
+- **Stories and similar channels stay visible; themes stay stock** (user, 2026-09-23). Purple is the
+  logo only, generated at build time, and shows because the app runs under its own id
+  `org.telegram.desktop.custom` (launcher + icons installed under that name).
+- **Repo is public** (user, 2026-09-23) for unlimited Actions minutes; never commit secrets.
 - **Android builds on GitHub Actions** (no local SDK), arm64 only, package `org.telegram.messenger.custom`.
 - **Secrets never in git:** signing key + passwords in `.secrets/` (gitignored, back it up: losing
   it means uninstall-to-update on the phone), copies in GitHub repo secrets. `api_id` in `.env`.
@@ -28,7 +31,7 @@ learned from AyuGram. Split out of `PC Manager ⚙️/` 2026-09-23.
 | desktop/UPSTREAM | pinned tdesktop version + hashes | 2026-09-23 |
 | desktop/build.sh | fetch, patch, build (local or CI), then install.sh | 2026-09-23 |
 | desktop/install.sh | install a build (local stage or `--from-ci`), `--rollback` | 2026-09-23 |
-| desktop/purple.py | regenerates the purple Classic-palette patch after upstream bumps | 2026-09-23 |
+| desktop/purple.py | recolors the logo PNGs purple at build time (called by build.sh) | 2026-09-23 |
 | desktop/patches/ | desktop patch series (`git format-patch` output) | 2026-09-23 |
 | android/UPSTREAM | pinned DrKLO/Telegram commit | 2026-09-23 |
 | android/customize.sh | package id, label, arm64, signing, api_id, patches onto a DrKLO checkout | 2026-09-23 |

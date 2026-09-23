@@ -62,6 +62,9 @@ if (( ${#patches[@]} )); then
     git -C "$tree" -c user.name=custom -c user.email=custom@localhost am -q "${patches[@]}"
 fi
 echo "patches: ${#patches[@]}"
+# Purple logo: generated from the stock PNGs, committed so the tree stays clean.
+python3 "$here/purple.py" "$tree"
+git -C "$tree" -c user.name=custom -c user.email=custom@localhost commit -qam "generated: purple icons"
 
 # 4. tde2e (end-to-end call encryption lib from tdlib), built once
 if [[ ! -d $td/install ]]; then

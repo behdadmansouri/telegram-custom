@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Wed, 23 Sep 2026 15:29:14 -0400
+Subject: [PATCH] Own Linux app id: org.telegram.desktop.custom
+
+The Wayland app id / desktop file name decides which launcher and icon the
+shell shows; with the stock id the window is grouped under the official
+Telegram and gets its blue icon. Also keeps D-Bus names apart, so both
+clients can run at once.
+---
+ Telegram/SourceFiles/platform/linux/specific_linux.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/Telegram/SourceFiles/platform/linux/specific_linux.cpp b/Telegram/SourceFiles/platform/linux/specific_linux.cpp
+index e9f4e5b0..4e60c955 100644
+--- a/Telegram/SourceFiles/platform/linux/specific_linux.cpp
++++ b/Telegram/SourceFiles/platform/linux/specific_linux.cpp
+@@ -742,7 +742,9 @@ void start() {
+ 				Core::Launcher::Instance().instanceHash().constData());
+ 		}
+ 
+-		return u"org.telegram.desktop"_q;
++		// telegram-custom: own app id, so the desktop shell gives us our own
++		// launcher + (purple) icon instead of the official client's.
++		return u"org.telegram.desktop.custom"_q;
+ 	}());
+ 
+ 	LOG(("App ID: %1").arg(QGuiApplication::desktopFileName()));
+-- 
+2.55.0
+

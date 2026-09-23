@@ -23,12 +23,12 @@ AyuGram code locations below are from `AyuGram/AyuGramDesktop` branch `dev`, rea
 
 1. **Stock builds.** Desktop local (`desktop/build.sh`), Android on CI. Proves the pipeline before any patch.
 2. **Desktop cheap patches**, one each: ads off, non-usable custom emoji hidden, per-folder counter
-   hiding (folder tab right-click), notify delay off, purple Classic palette. Settings live in
+   hiding (folder tab right-click), notify delay off, purple logo. Settings live in
    `<workdir>/custom.json`; UI only where a toggle is used often.
 3. **Desktop ghost mode**: the five send-guards + "read on interact", one toggle in the main menu.
    Skip "schedule messages" unless wanted.
 4. **Hardening patches** (see below): no link-preview fetch while typing, no cloud draft sync.
-5. **Android**: ads, custom emoji, folder counters, ghost mode, purple. Ghost mode on Android intercepts centrally
+5. **Android**: ads, custom emoji, folder counters, ghost mode, purple logo. Ghost mode on Android intercepts centrally
    in `tgnet/ConnectionsManager.java` (AyuGram4A's approach, stale 2023 source, reference only).
 6. **Spy essentials + message filters** (desktop, then Android).
 

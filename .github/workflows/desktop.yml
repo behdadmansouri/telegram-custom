@@ -30,7 +30,7 @@ jobs:
           pacman -Sy --noconfirm --needed archlinux-keyring manjaro-keyring > /dev/null
           pacman-mirrors --get-branch || true
           # runtime + build deps from the Arch PKGBUILD at the pinned tag
-          pacman -Syu --noconfirm --needed base-devel ccache \
+          pacman -Syu --noconfirm --needed base-devel ccache python-pillow python-numpy \
             abseil-cpp ada ffmpeg glib2 hunspell kcoreaddons libavif libfido2 libheif \
             libjpeg-turbo libjxl libpipewire libsrtp libxcb libxcomposite libxdamage \
             libxext libxfixes libxkbcommon libxrandr libxtst lz4 minizip openal openh264 \
