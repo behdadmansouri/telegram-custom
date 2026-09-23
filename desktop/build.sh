@@ -13,10 +13,13 @@ source "$here/UPSTREAM"
 [[ -f $root/.env ]] && source "$root/.env"
 
 ver=$TDESKTOP_VERSION
-src=$root/src
+# Source + build trees live outside the project: "AI Projects" has a space,
+# and gobject-introspection's libtool step splits paths on it.
+cache=${TG_CUSTOM_CACHE:-$HOME/.cache/telegram-custom}
+src=$cache/src
 tree=$src/tdesktop-$ver-full
 td=$src/td
-bld=$root/build/desktop
+bld=$cache/build/desktop
 prefix=${PREFIX:-$HOME/.local/opt/telegram-custom}
 workdir=$HOME/.local/share/TelegramCustom
 jobs=${JOBS:-4}
