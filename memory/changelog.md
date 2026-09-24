@@ -3,3 +3,4 @@
 - 2026-09-23: Android feature patches: no ads, unusable emoji hidden, per-folder counters, ghost mode (Settings row), purple launcher icon.
 - 2026-09-23: first desktop build installed locally (7.2.5 + no ads, unusable emoji hidden, per-folder counters, ghost mode, no notify delay, purple logo, own app id).
 - 2026-09-23: builds switched to own api_id (secrets + .env).
+- 2026-09-23: first desktop CI build (Manjaro container, own api_id) installed via install.sh --from-ci.

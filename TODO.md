@@ -1,7 +1,6 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
-- [ ] 🤖 **First desktop CI build** `M`: Manjaro container; later builds reuse ccache
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
