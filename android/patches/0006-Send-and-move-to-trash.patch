@@ -1,0 +1,155 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Sat, 26 Sep 2026 08:26:06 -0400
+Subject: [PATCH] Send and move to trash
+
+Long-press send in the gallery attach menu -> Send and move to trash. Once
+the server has every item and nothing else is uploading in that chat,
+Android's own dialog asks to move the originals to the system trash (one
+dialog per send). A send error aborts it: nothing is trashed that did not
+arrive. Android 11+.
+---
+ .../org/telegram/messenger/SendAndTrash.java  | 104 ++++++++++++++++++
+ .../ui/Components/ChatAttachAlert.java        |  15 +++
+ 2 files changed, 119 insertions(+)
+ create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/SendAndTrash.java
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/SendAndTrash.java b/TMessagesProj/src/main/java/org/telegram/messenger/SendAndTrash.java
+new file mode 100644
+index 00000000..41459e69
+--- /dev/null
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/SendAndTrash.java
+@@ -0,0 +1,104 @@
++package org.telegram.messenger;
++
++import android.app.Activity;
++import android.app.PendingIntent;
++import android.content.ContentUris;
++import android.net.Uri;
++import android.os.Build;
++import android.provider.MediaStore;
++import android.widget.Toast;
++
++import org.telegram.tgnet.TLRPC;
++import org.telegram.ui.LaunchActivity;
++
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.HashSet;
++
++// telegram-custom: "Send and move to trash". Remembers the gallery items of
++// one send, waits until the server has every one of them and nothing else is
++// still uploading in that chat, then asks Android (one system dialog) to move
++// the originals to the system trash. Any send error on the account aborts:
++// nothing is trashed that did not arrive. The trash, not a delete, so a
++// mistake stays recoverable.
++public class SendAndTrash implements NotificationCenter.NotificationCenterDelegate {
++
++    public static boolean supported() {
++        return Build.VERSION.SDK_INT >= 30;
++    }
++
++    // entries: the PhotoEntry values of the send, captured before it clears them.
++    public static void track(int account, long dialogId, Collection<Object> entries) {
++        if (!supported()) return;
++        ArrayList<Uri> uris = new ArrayList<>();
++        for (Object o : entries) {
++            if (!(o instanceof MediaController.PhotoEntry)) continue;
++            MediaController.PhotoEntry e = (MediaController.PhotoEntry) o;
++            if (e.imageId <= 0) continue; // shot inside the attach menu, never in the gallery
++            uris.add(ContentUris.withAppendedId(e.isVideo ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI : MediaStore.Images.Media.EXTERNAL_CONTENT_URI, e.imageId));
++        }
++        if (uris.isEmpty()) return;
++        new SendAndTrash(account, dialogId, uris, entries.size());
++    }
++
++    private final int account;
++    private final long dialogId;
++    private final ArrayList<Uri> uris;
++    private final int count;
++    private final HashSet<Integer> arrived = new HashSet<>(); // local ids; each arrival is posted twice
++
++    private SendAndTrash(int account, long dialogId, ArrayList<Uri> uris, int count) {
++        this.account = account;
++        this.dialogId = dialogId;
++        this.uris = uris;
++        this.count = count;
++        NotificationCenter.getInstance(account).addObserver(this, NotificationCenter.messageReceivedByServer);
++        NotificationCenter.getInstance(account).addObserver(this, NotificationCenter.messageSendError);
++    }
++
++    private void stop() {
++        NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.messageReceivedByServer);
++        NotificationCenter.getInstance(account).removeObserver(this, NotificationCenter.messageSendError);
++    }
++
++    @Override
++    public void didReceivedNotification(int id, int acc, Object... args) {
++        if (id == NotificationCenter.messageSendError) {
++            stop();
++            Toast.makeText(ApplicationLoader.applicationContext, "A send failed: nothing moved to trash", Toast.LENGTH_LONG).show();
++        } else if (id == NotificationCenter.messageReceivedByServer) {
++            TLRPC.Message msg = (TLRPC.Message) args[2];
++            if ((Long) args[3] != dialogId || msg == null || msg.media == null || msg.media instanceof TLRPC.TL_messageMediaEmpty) return;
++            if (!arrived.add((Integer) args[0]) || arrived.size() < count) return;
++            stop();
++            AndroidUtilities.runOnUIThread(this::whenChatIdle);
++        }
++    }
++
++    // Belt and braces: the count could include an unrelated media message in
++    // the same chat, so also wait until nothing there is still uploading.
++    private void whenChatIdle() {
++        if (SendMessagesHelper.getInstance(account).getSendingMessageId(dialogId) != 0) {
++            AndroidUtilities.runOnUIThread(this::whenChatIdle, 1000);
++        } else {
++            askToTrash();
++        }
++    }
++
++    // The system dialog needs a foreground activity; if the app is in the
++    // background when the last upload lands, ask once it is back.
++    private void askToTrash() {
++        if (Build.VERSION.SDK_INT < 30) return;
++        Activity activity = LaunchActivity.instance;
++        if (activity == null || ApplicationLoader.mainInterfacePaused) {
++            AndroidUtilities.runOnUIThread(this::askToTrash, 2000);
++            return;
++        }
++        try {
++            PendingIntent request = MediaStore.createTrashRequest(activity.getContentResolver(), uris, true);
++            activity.startIntentSender(request.getIntentSender(), null, 0, 0, 0);
++        } catch (Exception e) {
++            FileLog.e(e);
++        }
++    }
++}
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+index 28534c59..0537b3b1 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
+@@ -4001,6 +4001,21 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+                     }
+                 });
+             }
++            if (editingMessageObject == null && (currentAttachLayout == photoLayout || currentAttachLayout == photoPreviewLayout) && org.telegram.messenger.SendAndTrash.supported()) { // telegram-custom
++                options.add(R.drawable.msg_delete, "Send and move to trash", () -> {
++                    final long effectId = messageSendPreview != null ? messageSendPreview.getSelectedEffect() : 0;
++                    writeButton.setEffect(ChatAttachAlert.this.effectId = effectId);
++                    final ArrayList<Object> sent = new ArrayList<>(photoLayout.getSelectedPhotos().values());
++                    final boolean shownDialog = sendPressed(true, 0, 0, effectId, isCaptionAbove());
++                    if (buttonPressed) { // false if the send was cancelled (caption too long, paid-message prompt)
++                        org.telegram.messenger.SendAndTrash.track(currentAccount, getDialogId(), sent);
++                    }
++                    if (messageSendPreview != null) {
++                        messageSendPreview.dismiss(!shownDialog);
++                        messageSendPreview = null;
++                    }
++                });
++            }
+             if (editingMessageObject == null && canHaveStars && chatActivity != null && ChatObject.isChannelAndNotMegaGroup(chatActivity.getCurrentChat()) && chatActivity.getCurrentChatInfo() != null && chatActivity.getCurrentChatInfo().paid_media_allowed) {
+                 ActionBarMenuSubItem item = options.add(R.drawable.menu_feature_paid, getString(R.string.PaidMediaButton), null).getLast();
+                 item.setOnClickListener(v -> {
+-- 
+2.55.0
+

@@ -56,3 +56,19 @@ What *is* in reach:
 Own api_id since 2026-09-23: in `.env` (local builds) and repo secrets `TG_API_ID`/`TG_API_HASH`
 (CI). Without them the builds fall back to the official keys. Changing it is a compile definition on
 the whole desktop target, so it forces a full rebuild once.
+
+## 🤝 trust: what makes a public build believable
+
+The design already does the heavy lifting: the whole difference from Telegram is `*/patches/*.patch`
+on top of a pinned upstream commit, small enough for a person or an LLM to read in one sitting.
+What is missing is proof that the *binary* people download came from that source.
+
+| # | Piece | What it proves | Cost | Pick |
+|---|---|---|---|---|
+| 1 | Build provenance (`actions/attest@v4` in both workflows; users run `gh attestation verify <apk> -R behdadmansouri/telegram-custom`) | this exact file was built by this repo's workflow from commit X, not on my laptop | ~10 lines | **yes** |
+| 2 | GitHub Releases on a `v*` tag: APK + desktop tarball + `SHA256SUMS` | a stable, public, non-expiring download (Actions artifacts need a login and expire in 30 days) | ~20 lines | **yes** |
+| 3 | README "what's changed from upstream": one line per patch with its size, plus a copy-paste prompt for an AI review of `android/patches/` | the diff is small and readable; invites the "have an agent check it" review | a README | **yes** |
+| 4 | CI patch-lint: fail if a patch adds a URL/host, a socket or HTTP client, a manifest permission, or a dependency | "our changes add no network endpoints", checked on every build | a small script | **yes** |
+| 5 | Signing-key fingerprint in the README | future APKs come from the same key | 1 line | yes |
+| 6 | Reproducible builds (anyone rebuilds, gets the same bytes) | strongest proof there is | large: timestamps, NDK paths, signing | no, for now |
+| 7 | Third-party audit, or live traffic auditing | real assurance on upstream's own network behaviour | beyond a hobby project; upstream's traffic is Telegram's anyway | no |

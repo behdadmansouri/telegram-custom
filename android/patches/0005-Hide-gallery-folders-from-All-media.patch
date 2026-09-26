@@ -1,0 +1,144 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Bmans <bmans054@uottawa.ca>
+Date: Sat, 26 Sep 2026 08:24:51 -0400
+Subject: [PATCH] Hide gallery folders from All media
+
+Long-press a folder in the attach menu's album dropdown to leave it out of
+All media / All photos / All videos (every picker, stories included). The
+folder itself stays in the list, marked "hidden"; long-press again to bring
+it back. Stored device-wide in CustomSettings.
+---
+ .../telegram/messenger/CustomSettings.java    | 21 +++++++++++++++++++
+ .../telegram/messenger/MediaController.java   | 21 +++++++++++--------
+ .../ChatAttachAlertPhotoLayout.java           | 12 ++++++++++-
+ 3 files changed, 44 insertions(+), 10 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+index 5014cc59..356a2924 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+@@ -129,4 +129,25 @@ public class CustomSettings {
+         }
+         return true;
+     }
++
++    // Gallery folders (MediaStore bucket ids) left out of "All media" /
++    // "All photos" / "All videos" in every picker; the folder itself stays in
++    // the album list. Device-wide, not per account. Toggled by long-pressing
++    // the folder in the attach menu's album dropdown.
++    public static Set<String> hiddenGalleryBuckets() {
++        return prefs().getStringSet("hiddenGalleryBuckets", Collections.emptySet());
++    }
++
++    public static boolean isGalleryBucketHidden(int bucketId) {
++        return hiddenGalleryBuckets().contains(String.valueOf(bucketId));
++    }
++
++    public static void toggleGalleryBucketHidden(int bucketId) {
++        Set<String> set = new HashSet<>(prefs().getStringSet("hiddenGalleryBuckets", Collections.emptySet()));
++        String id = String.valueOf(bucketId);
++        if (!set.remove(id)) {
++            set.add(id);
++        }
++        prefs().edit().putStringSet("hiddenGalleryBuckets", set).apply();
++    }
+ }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index 9c443be5..1fad9657 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -6120,6 +6120,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+             }
+             Integer mediaCameraAlbumId = null;
+             Integer photoCameraAlbumId = null;
++            final java.util.Set<String> hiddenBuckets = CustomSettings.hiddenGalleryBuckets(); // telegram-custom
+ 
+             Cursor cursor = null;
+             try {
+@@ -6161,21 +6162,22 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             long size = cursor.getLong(sizeColumn);
+ 
+                             PhotoEntry photoEntry = new PhotoEntry(bucketId, imageId, dateTaken, path, orientation, 0, false, width, height, size);
++                            final boolean inAll = !hiddenBuckets.contains(String.valueOf(bucketId)); // telegram-custom
+ 
+-                            if (allPhotosAlbum == null) {
++                            if (inAll && allPhotosAlbum == null) {
+                                 allPhotosAlbum = new AlbumEntry(0, LocaleController.getString(R.string.AllPhotos), photoEntry);
+                                 photoAlbumsSorted.add(0, allPhotosAlbum);
+                             }
+-                            if (allMediaAlbum == null) {
++                            if (inAll && allMediaAlbum == null) {
+                                 allMediaAlbum = new AlbumEntry(0, LocaleController.getString(R.string.AllMedia), photoEntry);
+                                 mediaAlbumsSorted.add(0, allMediaAlbum);
+                             }
+-                            if (allPhotosAlbum.photos.size() < 15) {
++                            if (inAll && allPhotosAlbum.photos.size() < 15) {
+                                 // preload XMP of first few photos
+                                 photoEntry.isLivePhoto();
+                             }
+-                            allPhotosAlbum.addPhoto(photoEntry);
+-                            allMediaAlbum.addPhoto(photoEntry);
++                            if (inAll) allPhotosAlbum.addPhoto(photoEntry);
++                            if (inAll) allMediaAlbum.addPhoto(photoEntry);
+ 
+                             AlbumEntry albumEntry = mediaAlbums.get(bucketId);
+                             if (albumEntry == null) {
+@@ -6259,8 +6261,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                             int orientation = 0;
+ 
+                             PhotoEntry photoEntry = new PhotoEntry(bucketId, imageId, dateTaken, path, orientation, (int) (duration / 1000), true, width, height, size);
++                            final boolean inAll = !hiddenBuckets.contains(String.valueOf(bucketId)); // telegram-custom
+ 
+-                            if (allVideosAlbum == null) {
++                            if (inAll && allVideosAlbum == null) {
+                                 allVideosAlbum = new AlbumEntry(0, LocaleController.getString(R.string.AllVideos), photoEntry);
+                                 allVideosAlbum.videoOnly = true;
+                                 int index = 0;
+@@ -6272,12 +6275,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                                 }
+                                 mediaAlbumsSorted.add(index, allVideosAlbum);
+                             }
+-                            if (allMediaAlbum == null) {
++                            if (inAll && allMediaAlbum == null) {
+                                 allMediaAlbum = new AlbumEntry(0, LocaleController.getString(R.string.AllMedia), photoEntry);
+                                 mediaAlbumsSorted.add(0, allMediaAlbum);
+                             }
+-                            allVideosAlbum.addPhoto(photoEntry);
+-                            allMediaAlbum.addPhoto(photoEntry);
++                            if (inAll) allVideosAlbum.addPhoto(photoEntry);
++                            if (inAll) allMediaAlbum.addPhoto(photoEntry);
+ 
+                             AlbumEntry albumEntry = mediaAlbums.get(bucketId);
+                             if (albumEntry == null) {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
+index 5b6f2ba2..cfded11e 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java
+@@ -1912,13 +1912,23 @@ public class ChatAttachAlertPhotoLayout extends ChatAttachAlert.AttachAlertLayou
+             dropDown.setCompoundDrawablesWithIntrinsicBounds(null, null, dropDownDrawable, null);
+             for (int a = 0, N = dropDownAlbums.size(); a < N; a++) {
+                 MediaController.AlbumEntry album = dropDownAlbums.get(a);
+-                AlbumButton btn = new AlbumButton(getContext(), album.coverPhoto, album.bucketName, album.photos.size(), resourcesProvider);
++                final boolean hidden = album.bucketId != 0 && org.telegram.messenger.CustomSettings.isGalleryBucketHidden(album.bucketId); // telegram-custom
++                AlbumButton btn = new AlbumButton(getContext(), album.coverPhoto, hidden ? album.bucketName + " · hidden" : album.bucketName, album.photos.size(), resourcesProvider);
+                 dropDownContainer.getPopupLayout().addView(btn);
+                 final int i = a + 10;
+                 btn.setOnClickListener(v -> {
+                     parentAlert.actionBar.getActionBarMenuOnItemClick().onItemClick(i);
+                     dropDownContainer.toggleSubMenu();
+                 });
++                if (album.bucketId != 0) { // telegram-custom: long-press hides/shows the folder in "All media"
++                    btn.setOnLongClickListener(v -> {
++                        org.telegram.messenger.CustomSettings.toggleGalleryBucketHidden(album.bucketId);
++                        dropDownContainer.toggleSubMenu();
++                        android.widget.Toast.makeText(getContext(), album.bucketName + (hidden ? " is back in All media" : " hidden from All media"), android.widget.Toast.LENGTH_SHORT).show();
++                        MediaController.loadGalleryPhotosAlbums(0);
++                        return true;
++                    });
++                }
+             }
+         }
+     }
+-- 
+2.55.0
+
