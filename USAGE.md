@@ -13,15 +13,26 @@
 5. **Ghost mode:** ☰ menu → Ghost mode. **Folder counter:** right-click a folder tab → Hide/Show unread counter.
 
 ## 📱 android
-1. GitHub → `telegram-custom` repo → Actions → **android** → latest run → download the APK artifact
-   (a push touching `android/` builds automatically; "Run workflow" builds on demand).
-2. Install it; it sits next to the official Telegram as **TG Custom**.
-3. No Google push for this build: in Settings → Notifications, turn on **Keep-alive service** and
+1. **Download:** the repo's **Releases** page, newest "Android" release → the `.apk`. A push to
+   `main` touching `android/` builds and publishes one (free: the repo is public).
+2. **A branch build** (not released): Actions → **android** → Run workflow → pick the branch; the
+   APK is the run's artifact.
+3. It sits next to the official Telegram as **TG Custom**.
+4. No Google push for this build: in Settings → Notifications, turn on **Keep-alive service** and
    **Background connection**, or notifications arrive late.
 
 ## 🔁 updating from upstream
 - Desktop: edit `desktop/UPSTREAM` (version + the two hashes from the Arch PKGBUILD at that tag), rerun `desktop/build.sh`.
 - Android: paste the newest `update to X` commit sha from DrKLO/Telegram into line 1 of `android/UPSTREAM`, push.
+
+## 🌿 branches
+`main` = what CI builds and publishes. A new feature lives on its own branch until it has been
+tried on the device (a workflow run on the branch), then merges to `main`.
+
+## ✏️ writing an Android patch
+1. Edit inside `~/.cache/telegram-custom/android-src` (branch `custom` = upstream + our patches), commit.
+2. From the project root: `git -C ~/.cache/telegram-custom/android-src format-patch -N --zero-commit $(head -1 android/UPSTREAM) -o "$PWD/android/patches"`
+3. Push to a branch and run the **android** workflow on it; CI applies the series to a clean checkout, so the patch files are the truth.
 
 ## ✏️ writing a desktop patch
 1. Edit inside `~/.cache/telegram-custom/src/tdesktop-<ver>-full` (a git tree; branch `custom` = upstream + our patches), commit.

@@ -1,6 +1,7 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
+- [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
@@ -10,6 +11,7 @@
 - [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
 ## 🤔 Needs your call
+- [ ] 🧍 **Trust kit: build 1, 3, 4, 5 too?** `M` `think`: [docs/plan.md](docs/plan.md) → trust (Releases done); top pick is signed build provenance
 - [ ] 🧍 **Back up `.secrets/`** `S`: the Android signing key; lose it and every update needs an uninstall
 - [ ] 🧍 **Spy essentials: encrypt the saved deleted messages?** `S` `think`: my pick is encrypted under the local passcode (AyuGram keeps them in plaintext)
 

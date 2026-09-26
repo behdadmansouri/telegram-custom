@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     container: manjarolinux/base:latest
+    permissions:
+      contents: write   # the Release on main
     env:
       CI: 'true'
       TG_CUSTOM_CACHE: /tmp/tgc
@@ -59,10 +61,24 @@ jobs:
           ccache -s | head -8
 
       - name: Package
-        run: tar -C /tmp/tgc/stage -czf telegram-custom.tar.gz .
+        run: |
+          source desktop/UPSTREAM
+          echo "APP_VERSION=$TDESKTOP_VERSION" >> "$GITHUB_ENV"
+          tar -C /tmp/tgc/stage -czf telegram-custom.tar.gz .
+          mkdir out
+          cp telegram-custom.tar.gz "out/Telegram-Custom-$TDESKTOP_VERSION-manjaro-x86_64.tar.gz"
 
       - uses: actions/upload-artifact@v4
         with:
           name: telegram-custom-desktop
           path: telegram-custom.tar.gz
           retention-days: 30
+
+      - name: Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          command -v gh > /dev/null || pacman -S --noconfirm --needed github-cli > /dev/null
+          .github/release.sh desktop "$APP_VERSION" "tdesktop v$APP_VERSION" out/*.tar.gz
