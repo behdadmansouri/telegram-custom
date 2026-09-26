@@ -1,0 +1,16 @@
+name: patch-lint
+
+# Every push: our patches may not add a URL, network code, a permission or a
+# dependency (.github/patch-lint.sh). Seconds, not minutes.
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/patch-lint.sh

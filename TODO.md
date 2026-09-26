@@ -1,6 +1,7 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
+- [ ] 🧍 **Give CI a bot for the channel posts** `S`: steps in [USAGE.md](USAGE.md) → announcements; without it releases still publish, just unannounced
 - [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
@@ -13,8 +14,9 @@
 - [ ] 🧍 **Gallery: a hidden folder drops out of All media** - attach → album name at top → long-press e.g. Documents; it reads "· hidden" and its photos leave All media.
 - [ ] 🧍 **Send and move to trash** - long-press send → Send and move to trash; after the upload one Android dialog asks to trash the originals.
 
+- [ ] 🤖 **Each `main` release has an attestation and a channel post** - `gh attestation verify` on the APK; the post in the channel.
+
 ## 🤔 Needs your call
-- [ ] 🧍 **Trust kit: build 1, 3, 4, 5 too?** `M` `think`: [docs/plan.md](docs/plan.md) → trust (Releases done); top pick is signed build provenance
 - [ ] 🧍 **Back up `.secrets/`** `S`: the Android signing key; lose it and every update needs an uninstall
 - [ ] 🧍 **Spy essentials: encrypt the saved deleted messages?** `S` `think`: my pick is encrypted under the local passcode (AyuGram keeps them in plaintext)
 

@@ -11,7 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
-      contents: write   # the Release on main
+      contents: write      # the Release on main
+      id-token: write      # build provenance (Sigstore)
+      attestations: write
     steps:
       # The native build (ffmpeg, boringssl, ...) outgrows the runner's ~14 GB
       # free disk; drop preinstalled toolchains we never use (keeps the Android SDK).
@@ -26,6 +28,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           path: custom
+
+      - name: Patch lint
+        run: bash custom/.github/patch-lint.sh
 
       - name: Pin upstream
         run: echo "UPSTREAM_REF=$(grep -v '^#' custom/android/UPSTREAM | head -1)" >> "$GITHUB_ENV"
@@ -91,10 +96,17 @@ jobs:
           path: out/*.apk
           retention-days: 30
 
+      - uses: actions/attest@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          subject-path: out/*.apk
+
       - name: Release
         if: github.ref == 'refs/heads/main'
         working-directory: custom
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHANNEL: ${{ secrets.TG_CHANNEL }}
         run: .github/release.sh android "$APP_VERSION" "DrKLO/Telegram@${UPSTREAM_REF:0:8}" ../out/*.apk

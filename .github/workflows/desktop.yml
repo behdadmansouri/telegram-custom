@@ -16,7 +16,9 @@ jobs:
     timeout-minutes: 360
     container: manjarolinux/base:latest
     permissions:
-      contents: write   # the Release on main
+      contents: write      # the Release on main
+      id-token: write      # build provenance (Sigstore)
+      attestations: write
     env:
       CI: 'true'
       TG_CUSTOM_CACHE: /tmp/tgc
@@ -44,6 +46,9 @@ jobs:
           nproc; free -g; df -h /
 
       - uses: actions/checkout@v4
+
+      - name: Patch lint
+        run: bash .github/patch-lint.sh
 
       - uses: actions/cache@v4
         with:
@@ -74,11 +79,18 @@ jobs:
           path: telegram-custom.tar.gz
           retention-days: 30
 
+      - uses: actions/attest@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          subject-path: out/*.tar.gz
+
       - name: Release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHANNEL: ${{ secrets.TG_CHANNEL }}
         run: |
           command -v gh > /dev/null || pacman -S --noconfirm --needed github-cli > /dev/null
           .github/release.sh desktop "$APP_VERSION" "tdesktop v$APP_VERSION" out/*.tar.gz

@@ -30,6 +30,13 @@
 - Desktop: edit `desktop/UPSTREAM` (version + the two hashes from the Arch PKGBUILD at that tag), rerun `desktop/build.sh`.
 - Android: paste the newest `update to X` commit sha from DrKLO/Telegram into line 1 of `android/UPSTREAM`, push.
 
+## 📣 announcements
+Every `main` release is posted to a Telegram channel by a bot, once these exist:
+1. @BotFather → `/newbot` → copy the token.
+2. Make the bot an admin of the channel with "Post messages".
+3. `gh secret set TG_BOT_TOKEN` (paste the token when it asks, so it never lands in shell history).
+4. `gh secret set TG_CHANNEL --body @yourchannel` (a private channel: its `-100...` id instead).
+
 ## 🌿 branches
 `main` = what CI builds and publishes. A new feature lives on its own branch until it has been
 tried on the device (a workflow run on the branch), then merges to `main`.
