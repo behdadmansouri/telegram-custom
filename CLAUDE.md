@@ -18,8 +18,9 @@ learned from AyuGram. Split out of `PC Manager ⚙️/` 2026-09-23.
   logo only, generated at build time, and shows because the app runs under its own id
   `org.telegram.desktop.custom` (launcher + icons installed under that name).
 - **Repo is public** (user, 2026-09-23) for unlimited Actions minutes; never commit secrets.
-- **Android builds locally or on GitHub Actions**, same recipe (`android/build.sh` / workflow), arm64 only,
-  package `org.telegram.messenger.custom`. Actions minutes are free for a public repo, so CI stays on for `main`.
+- **Android builds on GitHub Actions only** (user, 2026-09-26: minutes are free for a public repo, no
+  local toolchain wanted), arm64 only, package `org.telegram.messenger.custom`.
+- **Every `main` build publishes a GitHub Release** (user, 2026-09-26); branch builds stay artifacts.
 - **Feature branches until tried on the device** (2026-09-26): `main` is what CI publishes.
 - **Secrets never in git:** signing key + passwords in `.secrets/` (gitignored, back it up: losing
   it means uninstall-to-update on the phone), copies in GitHub repo secrets. `api_id` in `.env`.

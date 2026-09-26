@@ -11,9 +11,9 @@ pkg=${APP_PACKAGE:-org.telegram.messenger.custom}
 
 cd "$tg"
 
-# Our patch series, applied in order (android/build.sh commits them itself).
+# Our patch series, applied in order.
 shopt -s nullglob
-[[ -n ${PATCHES_APPLIED:-} ]] || for p in "$here"/patches/*.patch; do
+for p in "$here"/patches/*.patch; do
     echo "applying $(basename "$p")"
     git apply --whitespace=nowarn "$p"
 done
@@ -104,6 +104,6 @@ fi
 
 # Heap sized to the machine: upstream asks for 8g, a CI runner may have less.
 mem_gb=$(awk '/MemTotal/ {print int($2/1048576)}' /proc/meminfo)
-heap=${GRADLE_HEAP_GB:-$(( mem_gb * 7 / 10 ))}; (( heap < 3 )) && heap=3
+heap=$(( mem_gb * 7 / 10 )); (( heap < 3 )) && heap=3
 sed -i -E "s/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx${heap}g -XX:MaxMetaspaceSize=1g/" gradle.properties
 echo "gradle heap: ${heap}g of ${mem_gb}g"
