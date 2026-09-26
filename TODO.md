@@ -1,6 +1,7 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
+- [ ] 🧍 **Give CI a bot for the channel posts** `S`: steps in [USAGE.md](USAGE.md) → announcements; without it releases still publish, just unannounced
 - [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
@@ -10,8 +11,9 @@
 - [ ] 🧍 **The APK installs next to the official app as TG Custom, purple icon** - GitHub → Actions → android → newest run → artifact. Log in only after the api_id step.
 - [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
+- [ ] 🤖 **Each `main` release has an attestation and a channel post** - `gh attestation verify` on the APK; the post in the channel.
+
 ## 🤔 Needs your call
-- [ ] 🧍 **Trust kit: build 1, 3, 4, 5 too?** `M` `think`: [docs/plan.md](docs/plan.md) → trust (Releases done); top pick is signed build provenance
 - [ ] 🧍 **Back up `.secrets/`** `S`: the Android signing key; lose it and every update needs an uninstall
 - [ ] 🧍 **Spy essentials: encrypt the saved deleted messages?** `S` `think`: my pick is encrypted under the local passcode (AyuGram keeps them in plaintext)
 

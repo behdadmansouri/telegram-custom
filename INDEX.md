@@ -5,6 +5,7 @@
 | File | Purpose | Created |
 |---|---|---|
 | CLAUDE.md | rules + decisions (`AGENTS.md` is a symlink to it) | 2026-09-23 |
+| README.md | public face: download, what the patches do, how to verify a build | 2026-09-26 |
 | TODO.md | work queue | 2026-09-23 |
 | USAGE.md | how to build, install, update, write a patch | 2026-09-23 |
 | docs/ | plans → [docs/INDEX.md](docs/INDEX.md) | 2026-09-23 |
@@ -19,4 +20,6 @@
 | android/patches/ | Android patch series | 2026-09-23 |
 | .github/workflows/android.yml | CI build of the APK (artifact; on `main` also a Release) | 2026-09-23 |
 | .github/workflows/desktop.yml | CI build of desktop in a Manjaro container (artifact; on `main` also a Release) | 2026-09-23 |
-| .github/release.sh | publishes a CI build as a GitHub Release (files, SHA-256, patch list) | 2026-09-26 |
+| .github/release.sh | publishes a CI build as a GitHub Release (files, SHA-256, patch list), announces it on the channel | 2026-09-26 |
+| .github/patch-lint.sh | fails if a patch adds a URL, network code, a permission or a dependency | 2026-09-26 |
+| .github/workflows/patch-lint.yml | runs patch-lint on every push (README badge) | 2026-09-26 |
