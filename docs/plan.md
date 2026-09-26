@@ -66,7 +66,7 @@ What is missing is proof that the *binary* people download came from that source
 | # | Piece | What it proves | Cost | Pick |
 |---|---|---|---|---|
 | 1 | Build provenance (`actions/attest@v4` in both workflows; users run `gh attestation verify <apk> -R behdadmansouri/telegram-custom`) | this exact file was built by this repo's workflow from commit X, not on my laptop | ~10 lines | **yes** |
-| 2 | GitHub Releases on a `v*` tag: APK + desktop tarball + `SHA256SUMS` | a stable, public, non-expiring download (Actions artifacts need a login and expire in 30 days) | ~20 lines | **done**: every `main` build |
+| 2 | GitHub Releases: APK + desktop tarball, SHA-256 and patch list in the notes | a stable, public, non-expiring download (Actions artifacts need a login and expire in 30 days) | ~20 lines | **done**: every `main` build |
 | 3 | README "what's changed from upstream": one line per patch with its size, plus a copy-paste prompt for an AI review of `android/patches/` | the diff is small and readable; invites the "have an agent check it" review | a README | **yes** |
 | 4 | CI patch-lint: fail if a patch adds a URL/host, a socket or HTTP client, a manifest permission, or a dependency | "our changes add no network endpoints", checked on every build | a small script | **yes** |
 | 5 | Signing-key fingerprint in the README | future APKs come from the same key | 1 line | yes |
