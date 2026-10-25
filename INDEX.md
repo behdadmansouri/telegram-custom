@@ -27,4 +27,5 @@
 | .github/announce.sh | posts a Release to the Telegram channel (file or link, changelog); skips without secrets | 2026-10-24 |
 | .github/workflows/announce.yml | manual re-post of the newest release: checks the bot secrets without a build | 2026-10-24 |
 | .github/patch-lint.sh | fails if a patch adds a URL, network code, a permission or a dependency | 2026-09-26 |
+| .github/whats-custom-sheet.py | Pillow contact sheet of the What's custom glyphs from tdesktop 7.2.5 icons (preview fallback, docs/whats-custom.md section 2) | 2026-10-25 |
 | .github/workflows/patch-lint.yml | runs patch-lint on every push (README badge) | 2026-09-26 |
