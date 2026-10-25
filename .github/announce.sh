@@ -4,7 +4,8 @@
 # says what changed since this platform's previous release, plus the patch list.
 # Skips cleanly (exit 0, a notice in the run) while the secrets are unset.
 #
-# Usage (in a workflow, after .github/release.sh; GH_TOKEN, GH_REPO set):
+# Usage (in a workflow, after .github/release.sh, or from announce.yml to
+# re-post; GH_TOKEN, GH_REPO set; the tree checked out at the release commit):
 #   .github/announce.sh android|desktop <tag> <file>
 # Env: TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID (repo secrets)
 set -euo pipefail
@@ -16,7 +17,7 @@ if [[ -z ${TELEGRAM_BOT_TOKEN:-} || -z ${TELEGRAM_CHANNEL_ID:-} ]]; then
 fi
 
 url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag"
-title=$(gh release view "$tag" --json name -q .name)
+read -r sha title < <(gh release view "$tag" --json targetCommitish,name -q '"\(.targetCommitish) \(.name)"')
 esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
 
 # Changelog: commit subjects touching this platform since its previous release
@@ -26,10 +27,10 @@ paths=("$platform")
 prev=$(gh release list -L 100 --json tagName -q '.[].tagName' | grep "^$platform-v" | grep -vx "$tag" | head -1 || true)
 if [[ -n $prev ]]; then
     since=$(gh release view "$prev" --json targetCommitish -q .targetCommitish)
-    changes=$(git log --no-merges --format=%s "$since..$GITHUB_SHA" -- "${paths[@]}" 2>/dev/null || true)
+    changes=$(git log --no-merges --format=%s "$since..$sha" -- "${paths[@]}" 2>/dev/null || true)
     [[ -n $changes ]] || changes="Rebuild, no change to the app since $prev"
 else
-    changes=$(git log -1 --format=%s "$GITHUB_SHA")
+    changes=$(git log -1 --format=%s "$sha")
 fi
 n=$(wc -l <<<"$changes")
 
