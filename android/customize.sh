@@ -18,6 +18,15 @@ for p in "$here"/patches/*.patch; do
     git apply --whitespace=nowarn "$p"
 done
 
+# Build label after the version text in Settings (patch 0007): b<CI run
+# number>, "dev" outside CI. versionName/versionCode stay stock.
+label=dev
+[[ -n ${GITHUB_RUN_NUMBER:-} ]] && label=b$GITHUB_RUN_NUMBER
+cs=TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+grep -q 'CUSTOM_BUILD = "dev";' "$cs" || { echo "error: CUSTOM_BUILD placeholder not found in $cs" >&2; exit 1; }
+sed -i "s/CUSTOM_BUILD = \"dev\";/CUSTOM_BUILD = \"$label\";/" "$cs"
+echo "build label: $label"
+
 # Purple launcher icon, same hue rotation as desktop/purple.py. Release uses
 # @mipmap/ic_launcher(_round): the legacy PNGs, and on API 26+ the adaptive
 # icon whose blue is the gradient in drawable/icon_background_sa.xml. The

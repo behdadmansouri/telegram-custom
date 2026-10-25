@@ -1,0 +1,65 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: telegram-custom <telegram-custom@users.noreply.github.com>
+Date: Sat, 24 Oct 2026 23:58:57 -0400
+Subject: [PATCH] Build number next to the version text
+
+The Settings version line and the Settings footer (also shown in crash
+dialogs) end with " - TG Custom b<run>" (a middle dot in the app).
+versionName/versionCode stay stock: they go to Telegram's servers.
+CUSTOM_BUILD is "dev" in source; android/customize.sh rewrites it from
+GITHUB_RUN_NUMBER.
+---
+ .../java/org/telegram/messenger/AndroidUtilities.java    | 2 +-
+ .../main/java/org/telegram/messenger/CustomSettings.java | 9 +++++++++
+ .../src/main/java/org/telegram/ui/SettingsActivity.java  | 2 +-
+ 3 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+index 5fd7e2c8..7d7e3558 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
+@@ -6658,7 +6658,7 @@ public class AndroidUtilities {
+                     }
+                     break;
+             }
+-            return formatString("TelegramVersion", R.string.TelegramVersion, String.format(Locale.US, "v%s (%d) %s", pInfo.versionName, code, abi));
++            return formatString("TelegramVersion", R.string.TelegramVersion, String.format(Locale.US, "v%s (%d) %s", pInfo.versionName, code, abi)) + CustomSettings.buildLabel(); // telegram-custom
+         } catch (Exception e) {
+             FileLog.e(e);
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+index 356a2924..4301002d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+@@ -20,6 +20,15 @@ import java.util.Set;
+ // they never touch upstream's settings code (keeps rebases trivial).
+ public class CustomSettings {
+ 
++    // Our CI run number, shown after the version text in Settings. Never in
++    // versionName/versionCode: those go to Telegram's servers. "dev" is a
++    // placeholder android/customize.sh rewrites to b<GITHUB_RUN_NUMBER>.
++    public static final String CUSTOM_BUILD = "dev";
++
++    public static String buildLabel() {
++        return " \u00b7 TG Custom " + CUSTOM_BUILD;
++    }
++
+     private static SharedPreferences prefs() {
+         return ApplicationLoader.applicationContext.getSharedPreferences("telegram_custom", Context.MODE_PRIVATE);
+     }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index 59c2289a..39d63303 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -938,7 +938,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+                     }
+                     break;
+             }
+-            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi));
++            return formatString(R.string.TelegramVersion, String.format(Locale.US, "v%s (%d)\n%s", pInfo.versionName, code, abi)) + org.telegram.messenger.CustomSettings.buildLabel(); // telegram-custom
+         } catch (Exception e) {
+             FileLog.e(e);
+         }
+-- 
+2.55.0
+

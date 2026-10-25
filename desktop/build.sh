@@ -77,7 +77,15 @@ if [[ ${1:-} == --tree ]]; then
 fi
 # Purple logo: generated from the stock PNGs, committed so the tree stays clean.
 python3 "$here/purple.py" "$tree"
-git -C "$tree" -c user.name=custom -c user.email=custom@localhost commit -qam "generated: purple icons"
+# Build label after the version text (patch 0007): b<CI run number>, "dev"
+# outside CI. Only about_box.cpp changes, so ccache misses just that file.
+label=dev
+[[ -n ${GITHUB_RUN_NUMBER:-} ]] && label=b$GITHUB_RUN_NUMBER
+about=$tree/Telegram/SourceFiles/boxes/about_box.cpp
+grep -q 'kCustomBuild = "dev";' "$about" || { echo "error: kCustomBuild placeholder not found in $about" >&2; exit 1; }
+sed -i "s/kCustomBuild = \"dev\";/kCustomBuild = \"$label\";/" "$about"
+echo "build label: $label"
+git -C "$tree" -c user.name=custom -c user.email=custom@localhost commit -qam "generated: purple icons, build label"
 
 # 4. tde2e (end-to-end call encryption lib from tdlib), built once
 if [[ ! -d $td/install ]]; then

@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: telegram-custom <telegram-custom@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 00:01:08 -0400
+Subject: [PATCH] Build number next to the version text
+
+CurrentVersionText ends with a middle dot and b<run>, so the side-menu
+footer reads "Version 7.2.5 . b42 - About"; the About box and Settings >
+Advanced show the same. Kept short: the footer label is one unwrapped
+line in a 274px menu. AppVersionStr stays stock: it goes to Telegram's
+servers. kCustomBuild is "dev" in source; desktop/build.sh rewrites it
+from GITHUB_RUN_NUMBER.
+---
+ Telegram/SourceFiles/boxes/about_box.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/Telegram/SourceFiles/boxes/about_box.cpp b/Telegram/SourceFiles/boxes/about_box.cpp
+index 31c60aa8..a42232c2 100644
+--- a/Telegram/SourceFiles/boxes/about_box.cpp
++++ b/Telegram/SourceFiles/boxes/about_box.cpp
+@@ -152,6 +152,11 @@ QString telegramFaqLink() {
+ 
+ namespace {
+ 
++// telegram-custom: our CI run number, shown after the version (menu footer,
++// About box, Settings > Advanced). Never in AppVersionStr: the server gets
++// that. "dev" is a placeholder desktop/build.sh rewrites to b<run>.
++constexpr auto kCustomBuild = "dev";
++
+ [[nodiscard]] QString CurrentVersionText(bool withCommit) {
+ 	auto result = QString::fromLatin1(AppVersionStr);
+ 	if (Core::BuildIsCanary) {
+@@ -174,6 +179,7 @@ namespace {
+ 		&& Core::CanaryCommitHash[0] != '\0') {
+ 		result += u" \u00B7 "_q + QLatin1String(Core::CanaryCommitHash);
+ 	}
++	result += u" \u00B7 "_q + QLatin1String(kCustomBuild); // telegram-custom
+ 	return result;
+ }
+ 
+-- 
+2.55.0
+
