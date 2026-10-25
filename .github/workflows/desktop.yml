@@ -8,7 +8,8 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['desktop/**', '.github/workflows/desktop.yml']
+    # the laptop-side scripts don't change the app
+    paths: ['desktop/**', '!desktop/install.sh', '!desktop/auto-update.sh', '.github/workflows/desktop.yml']
 
 jobs:
   build:

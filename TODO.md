@@ -4,8 +4,8 @@
 - [ ] 🧍 **Give CI a bot for the channel posts** `S`: new bot + channel, two `gh secret set` commands, then Actions → announce to check: [USAGE.md](USAGE.md) → announcements
 - [ ] 🧍 **Delete the stale `TG_BOT_TOKEN` and `TG_CHANNEL` repo secrets** `S`: replaced by `TELEGRAM_*`; `TG_CHANNEL` held a placeholder
 - [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
-- [ ] 🤖 **Auto-upstream workflow** `M`: daily bump → build → `main` → Release, issue on failure: [plan](docs/plan.md) → batch 2 step 1
-- [ ] 🤖 **Laptop update timer** `S`: daily `install.sh --release` + notification: batch 2 step 2
+- [ ] 🧍 **Turn on the laptop's daily update** `S`: run `desktop/auto-update.sh --enable` once (my attempt was blocked as unapproved persistence)
+- [ ] 🤖 **Port desktop to the 7.3 Arch recipe** `M`: Manjaro stable is still on 7.2.5; 7.3 adds a Rust wallet-engine + new deps, so its bump will open an issue instead
 - [ ] 🧍 **Install Obtainium on the phone and add this repo** `S`: steps in [USAGE.md](USAGE.md) → android
 - [ ] 🤖 **Batch-2 patches** `M`: build number in the menus, captioned photos auto-ungroup, 8 accounts: batch 2 step 4
 - [ ] 🤖 **Trust model** `L` `think`: trusted chats load media, untrusted load nothing: [docs/trust.md](docs/trust.md)
@@ -19,6 +19,7 @@
 - [ ] 🧍 **The APK installs next to the official app as TG Custom, purple icon** - GitHub → Actions → android → newest run → artifact. Log in only after the api_id step.
 - [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
+- [ ] 🤖 **Upstream bumps land by themselves** - Actions → upstream daily run; a new `update to X` shows up as a Release, or as an issue when a patch broke.
 - [ ] 🤖 **Each `main` release has an attestation and a channel post** - `gh attestation verify` on the APK; the post in the channel.
 
 ## 🤔 Needs your call

@@ -8,25 +8,42 @@
    date" when there is nothing new. It refuses (and changes nothing) if a library is missing: update
    Manjaro first, since CI links against the current stable libs. If Telegram Custom is open, quit and
    reopen it to switch.
-3. **A feature-branch build** (not released): Actions → **desktop** → Run workflow → pick the branch,
+3. **Automatic, daily:** `desktop/auto-update.sh --enable` once. A systemd user timer then runs the
+   same install every day around 10:00 and notifies only when it installed something (reopen to switch)
+   or refused. `--disable` removes the timer.
+4. **A feature-branch build** (not released): Actions → **desktop** → Run workflow → pick the branch,
    then `desktop/install.sh --from-ci` (newest successful run on any branch).
-4. Launch **Telegram Custom** from the app menu. Its data lives in `~/.local/share/TelegramCustom`,
+5. Launch **Telegram Custom** from the app menu. Its data lives in `~/.local/share/TelegramCustom`,
    separate from the official client, so it needs its own login.
-5. Broken build? `desktop/install.sh --rollback` swaps the previous one back.
-6. **Ghost mode:** ☰ menu → Ghost mode. **Folder counter:** right-click a folder tab → Hide/Show unread counter.
+6. Broken build? `desktop/install.sh --rollback` swaps the previous one back.
+7. **Ghost mode:** ☰ menu → Ghost mode. **Folder counter:** right-click a folder tab → Hide/Show unread counter.
 
 ## 📱 android
 1. **Download:** the repo's **Releases** page, newest "Android" release → the `.apk`. A push to
    `main` touching `android/` builds and publishes one (free: the repo is public).
-2. **A branch build** (not released): Actions → **android** → Run workflow → pick the branch; the
+2. **Automatic updates with Obtainium** (free app, F-Droid or its GitHub): ➕ Add app → URL
+   `https://github.com/behdadmansouri/telegram-custom`, "Filter release titles by regular expression"
+   `^Android`, "Filter APKs by regular expression" `\.apk$`, then Install from Obtainium once. That
+   first install asks for a tap; after it Obtainium is the installer of record, and on Android 12+ later
+   updates install in the background with no tap (Settings → background updates on). Telegram's own
+   "update available" check is dead in this build, so it never offers the official APK.
+3. **A branch build** (not released): Actions → **android** → Run workflow → pick the branch; the
    APK is the run's artifact.
-3. It sits next to the official Telegram as **TG Custom**.
-4. No Google push for this build: in Settings → Notifications, turn on **Keep-alive service** and
+4. It sits next to the official Telegram as **TG Custom**.
+5. No Google push for this build: in Settings → Notifications, turn on **Keep-alive service** and
    **Background connection**, or notifications arrive late.
 
 ## 🔁 updating from upstream
-- Desktop: edit `desktop/UPSTREAM` (version + the two hashes from the Arch PKGBUILD at that tag), push to `main`.
-- Android: paste the newest `update to X` commit sha from DrKLO/Telegram into line 1 of `android/UPSTREAM`, push.
+Automatic: the **upstream** workflow runs daily (Actions → upstream → Run workflow to run it now). A
+newer DrKLO `update to X` commit, or a newer `telegram-desktop` in Manjaro stable, is committed to a
+branch `upstream/<platform>-<version>` and built there. Green: `main` moves to it, a Release goes out,
+the channel gets a post, and the devices pick it up as above. Red: a GitHub issue says which step failed
+(a patch that no longer applies shows in **Customize** or **Build**); nothing is released. One bump at a
+time: a failed `upstream/*` branch blocks the next until it is fixed (rerun there) or deleted.
+- Desktop only bumps by itself when the Arch PKGBUILD's recipe is unchanged (fingerprint
+  `PKGBUILD_RECIPE` in `desktop/UPSTREAM`). A changed one opens an issue: port `desktop/build.sh` and the
+  deps in `desktop.yml`, then set the new fingerprint from `.github/pkgbuild-recipe.sh <PKGBUILD>`.
+- By hand: edit the pin (`android/UPSTREAM` line 1; `desktop/UPSTREAM` version + hashes) and push to `main`.
 
 ## 📣 announcements
 Every `main` release is posted to a Telegram channel by a bot (the file if under 50 MB, else a
