@@ -1,13 +1,15 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
-- [ ] 🧍 **Give CI a bot for the channel posts** `S`: steps in [USAGE.md](USAGE.md) → announcements; without it releases still publish, just unannounced
+- [ ] 🧍 **Give CI a bot for the channel posts** `S`: new bot + channel, two `gh secret set` commands, then Actions → announce to check: [USAGE.md](USAGE.md) → announcements
+- [ ] 🧍 **Delete the stale `TG_BOT_TOKEN` and `TG_CHANNEL` repo secrets** `S`: replaced by `TELEGRAM_*`; `TG_CHANNEL` held a placeholder
 - [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
 ## 🔍 Verification
 - [ ] 🧍 **Desktop: Telegram Custom launches with the purple icon, separate from the official app** - app menu → Telegram Custom. ☰ → Ghost mode; right-click a folder tab → Hide unread counter.
+- [ ] 🤖 **The laptop runs the newest desktop Release, with no build tree** - `desktop/install.sh --release` says "up to date"; `~/.cache/telegram-custom` absent.
 - [ ] 🧍 **The APK installs next to the official app as TG Custom, purple icon** - GitHub → Actions → android → newest run → artifact. Log in only after the api_id step.
 - [ ] 🧍 **Android features work** - no ads; Settings → Ghost mode row; long-press a folder tab → Hide unread counter; locked emoji gone from the picker.
 
