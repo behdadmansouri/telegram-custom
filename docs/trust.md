@@ -1,6 +1,6 @@
 # Trust model: design
 
-Plan item: [plan.md](plan.md) → batch 2 step 5. Revised after [critique 1](archive/2026-10-25-trust-critique-1.md). Pins read: Android DrKLO `0aae9598` (13.0.3), desktop tdesktop `v7.2.5`. Paths are relative to `TMessagesProj/src/main/java/org/telegram/` (Android) and `Telegram/SourceFiles/` (desktop). ✓ = verified in source at the pin; ~ = inferred (reasoned from nearby code, not traced end to end). "Cn" points at critique objection n.
+Plan item: [plan.md](plan.md) → batch 2 step 5. Revised after [critique 1](archive/2026-10-25-trust-critique-1.md) and [critique 2](archive/2026-10-25-trust-critique-2.md). Pins read: Android DrKLO `0aae9598` (13.0.3), desktop tdesktop `v7.2.5`. Paths are relative to `TMessagesProj/src/main/java/org/telegram/` (Android) and `Telegram/SourceFiles/` (desktop). ✓ = verified in source at the pin; ~ = inferred (reasoned from nearby code, not traced end to end). "Cn" points at critique objection n.
 
 ## 0. 🧱 v1 build list (go straight down it)
 
@@ -10,40 +10,41 @@ One branch, one patch per platform (`0007-Media-trust` Android, `0007-Media-trus
 
 | # | Piece | Anchor | Lines |
 |---|---|---|---|
-| A1 | `messenger/TrustController.java` (new): rules of section 1, prefs, in-memory sets, tapped set, toast | new file | 220 |
+| A1 | `messenger/TrustController.java` (new): rules of section 1, prefs, snapshots, per-dialog verdict cache, tapped set, toast, Java backfill | new file | 250 |
 | A2 | Activity table `tc_activity`: create, feed, prune, one-time backfill (inside A1, two feed calls in storage) | `MessagesStorage.java:11863` (`putMessagesInternal`), `:16079` (`putMessages(messages_Messages, ...)`, history pages) ✓ | 2 |
 | A3 | Auto-download gate, top of the 4 funnels | `DownloadController.java:688`, `:778` (`canDownloadMediaInternal` ×2), `:861`, `:942` (`TLRPC.Message` ×2) ✓ | 4 |
 | A4 | Forwarded-story bypass in the `MessageObject` entry (its story branch returns before the funnel) | `DownloadController.java:609-617` ✓ | 1 |
 | A5 | Peerless callers: wrap with the message's trust | `ui/Cells/DialogCell.java:5801` ✓ (`currentDialogId`); `messenger/RichMessageLayout.java:6687`, `:7214`, `:8144` ✓ (`root.messageObject`) | 4 |
-| A6 | Image gate G (thumbnails, replies, link-preview images, games, cached GIF/video autoplay, animated/video stickers) | `messenger/ImageReceiver.java:572` (top of the 11-arg `setImage`) ✓ | 6 |
+| A6 | Image gate G (thumbnails, replies, pinned and composer bars, link-preview images, games, cached GIF/video autoplay, animated/video stickers) | `messenger/ImageReceiver.java:573`: first statement of the 11-arg `setImage` (`:572`), above the attach-backup block (`:573-588`) ✓ | 6 |
+| A6b | Tap unlock: first tap on a message in an untrusted chat marks it and rebinds the cell | `ui/Cells/ChatMessageCell.java:17854` (first statement of `didPressButton`), rebind via `setMessageObject` (`:13328`) ✓ | 4 |
 | A7 | Direct-URL web documents off | `messenger/ImageLocation.java:89` ✓ | 1 |
 | A8 | Story preload | `ui/Stories/StoriesController.java:580` ✓ | 1 |
 | A9 | Calls relay-only | `messenger/voip/VoIPService.java:3423`, `:1111`, `:1880`, `:4360` ✓ | 4 |
 | A10 | Chat ⋮ menu item (state-first label) | `ui/ChatActivity.java:1656` (id beside `add_shortcut = 24`), `:4445-4486` (`lazilyAddSubItem` block), `:3939` (`id == add_shortcut` handler) ✓ | 20 |
-| A11 | Settings row + one compact screen | `ui/SettingsActivity.java:708` (after Ghost mode's row 100, use id 101), `:845` switch ✓; new `ui/TrustSettingsActivity.java` | 100 |
-| | **Android total** | | **~365, ~45 inside upstream files** |
+| A11 | Settings row + one compact screen | after 0004 applies: row 101 below 0004's Ghost mode row 100, which 0004 inserts after stock row 10 (`ui/SettingsActivity.java:708` ✓ stock); `case 101:` after 0004's `case 100:`, which follows stock `case 10:` (`:845` ✓ stock); new `ui/TrustSettingsActivity.java` | 100 |
+| | **Android total** | | **~400, ~50 inside upstream files** |
 
 **Desktop (7.2.5)**
 
 | # | Piece | Anchor | Lines |
 |---|---|---|---|
-| D1 | `custom/custom_trust.{h,cpp}` (new): rules, per-account file, activity log, toast, repaint | new files + `Telegram/CMakeLists.txt` (as patch 0003) | 230 |
+| D1 | `custom/custom_trust.{h,cpp}` (new): rules (incl. own-message clause), per-account file, activity log, verdict cache, toast, repaint | new files + `Telegram/CMakeLists.txt` (as patch 0003) | 240 |
 | D2 | Activity feed | `history/history.cpp:576` (`History::createItem`), beside the `topPeers` line `:595-596` ✓ | 3 |
-| D3 | Auto-download + autoplay gates | `data/data_auto_download.cpp:367` (before `sticker()` at `:371`), `:406`, `:426`, `:449` ✓ | 8 |
-| D4 | Network thumbnails (photos, replies, link previews, documents) | `data/data_photo_media.cpp:153`; `data/data_document.cpp:870` (`loadThumbnail`); `history/view/media/history_view_web_page.cpp:944` ✓ | 10 |
+| D3 | Auto-download + autoplay gates | `data/data_auto_download.cpp:371` (one check, skip stickers), `:406`, `:426`, `:449` ✓ | 8 |
+| D4 | Network thumbnails (photos, replies, link previews, documents) | `data/data_photo_media.cpp:153`; `data/data_document.cpp:870` (`loadThumbnail`); `history/view/media/history_view_web_page.cpp:944`; `data/data_reply_preview.cpp:110-114` (Small fetch when no inline bytes) ✓ | 12 |
 | D5 | Animated/video stickers static | `history/view/media/history_view_sticker.cpp:190-195` (`readyToDrawAnimationFrame`) ✓ | 3 |
 | D6 | Direct-URL web documents off | `ui/image/image_location_factory.cpp:320-331` (`FromWebDocument`, `MTPDwebDocumentNoProxy` branch) ✓ | 2 |
-| D7 | Story preload | `data/data_stories.cpp:2611-2613` (`startPreloading`, after the `Expects`) ✓ | 4 |
+| D7 | Story preload | after desktop 0004 applies (it also edits this file): `data/data_stories.cpp:2611-2613` stock (`startPreloading`, after the `Expects`) ✓ | 4 |
 | D8 | Calls relay-only | `calls/calls_call.cpp:1090`, `:356`, `:490`, `:974` ✓ | 6 |
 | D9 | Chat ⋮ menu item | `window/window_peer_menu.cpp:1922` (`fillHistoryActions`) + new `Filler::addToggleTrust` ✓ | 25 |
 | D10 | Settings button + one compact box | `settings/sections/settings_advanced.cpp:217` (`BuildAutoDownloadSection`) ✓ | 75 |
-| | **Desktop total** | | **~365, ~65 inside upstream files** |
+| | **Desktop total** | | **~380, ~67 inside upstream files** |
 
 **CI (both)**
 
 | # | Piece | Where | Lines |
 |---|---|---|---|
-| C1 | Caller-count guard (section 4.1) | `.github/media-callers.sh` + `.github/media-callers.txt`, a step in `android.yml` and `desktop.yml` before patches apply | 30 + table |
+| C1 | Caller guard (section 4.1): fails on a new caller file or a count dropping to zero, warns on count changes | `.github/media-callers.sh` + `.github/media-callers.txt`, a step in `android.yml` and `desktop.yml` before patches apply | 40 + table |
 | C2 | Rule-table unit tests (pure `decide()` on both platforms) | JVM test in the Android build, a small C++ test target or a `static_assert`-free test binary on desktop (~) | 80 |
 
 ## 1. 📐 rules (spec)
@@ -56,7 +57,7 @@ One branch, one patch per platform (`0007-Media-trust` Android, `0007-Media-trus
 |---|---|---|
 | 0 | Trust model off | trusted (stock everywhere) |
 | 1 | Chat marked "never trust" | untrusted |
-| 2 | Saved Messages, or the Telegram service account 777000 | trusted |
+| 2 | Saved Messages, the Telegram service account 777000, or a message you sent (`out`) that is not a forward (Android `fwd_from == null`, desktop no `HistoryMessageForwarded`, ~) | trusted (for `out`: that message only) |
 | 3 | Group, channel or bot marked trusted by hand | trusted, no decay |
 | 4 | Group you created, or channel (broadcast) where you are creator or admin; setting, default on | trusted |
 | 5 | Person marked trusted less than `grace` days ago | trusted |
@@ -73,15 +74,17 @@ Rule 4 is deliberately narrower than "chats you admin": a supergroup where someo
 
 **What untrusted means (tap to load on):**
 - No media downloads without a tap: photos, videos, GIFs, round videos, voice, files.
-- Only the **embedded** thumbnail shows (Telegram's tiny blurred "stripped" size, bytes inside the message): no network thumbnail for photos, videos, GIFs, files, link previews, game previews, or the quoted image in a reply (C1, C14b).
+- Only the **embedded** thumbnail shows (Telegram's tiny blurred "stripped" size, bytes inside the message): no network thumbnail for photos, videos, GIFs, files, link previews, game previews, the quoted image in a reply, the pinned-message bar or the composer's reply/edit bar (R1-1, R1-14b, R2-3).
+- Shared locations keep their static map: it is a Telegram-proxied web file, fetched by Telegram, not from your IP (R2-4).
 - Nothing autoplays, including GIFs and videos already on disk from another chat.
 - Animated (TGS) and video (webm) stickers show their static thumbnail; static stickers show as normal. Tapping a sticker opens its pack as in stock, which plays it.
 - Stories of that peer are not preloaded.
 - Direct-URL web documents (`webDocumentNoProxy`, fetched from your own IP, not through Telegram) never load, in any chat, while the trust model is on (C4).
 - 1:1 calls use Telegram's relay only.
-- A tap always loads that one item, for the rest of the session.
+- A tap always loads that one item, for the rest of the session (GIFs and videos then play as stock).
+- Your own sent messages load as stock; your forwards of someone else's media stay gated (the laptop has not seen them yet either).
 
-**Not covered, said plainly:** custom emoji still animate (no chat context in their renderer, section 2.7); avatars and profile photos load everywhere (every client does); media opened in the photo viewer, story viewer or instant view loads (you opened it), and the story viewer's auto-advance to the next peer counts as opened; service-message photos (chat photo changed) load (`ChatActionCell`, ~).
+**Not covered, said plainly:** custom emoji still animate (no chat context in their renderer, section 2.7); avatars and profile photos load everywhere (every client does); media opened in the photo viewer, story viewer or instant view loads (you opened it), and the story viewer's auto-advance to the next peer counts as opened; the shared-media grid (profile → Media) loads its thumbnails when you open the tab (its receivers have no parent view, `ui/Cells/SharedPhotoVideoCell2.java:79-80` ✓, so G cannot tell it from a viewer); service-message photos (chat photo changed) load (`ChatActionCell`, ~).
 
 **Trusted means stock:** the user's normal auto-download, power-saving and P2P-privacy settings apply. Trust never forces a download stock would not do.
 
@@ -90,7 +93,7 @@ Rule 4 is deliberately narrower than "chats you admin": a supergroup where someo
 ## 2. 🤖 Android design
 
 ### 2.1 TrustController (A1)
-One instance per account (`getInstance(account)`, the `DownloadController` pattern). Surface: `allows(MessageObject)`, `allows(TLRPC.Message)`, `isTrusted(long dialogId)`, `setMark(long dialogId, int state)` (none / trusted / never), `noteTapped(MessageObject)`, `refresh()`, and a pure static `decide(...)` taking plain values (kind, flags, mark, markedAt, activeDays, now, settings) for the unit test (C2). Called on the UI thread from cell binding, so reads are O(1) on immutable snapshots: the marks map and the active-user set are replaced whole (`volatile` reference to an unmodifiable copy) by `refresh()` on the storage queue (C14c). `MessagesController.getChat` reads a `ConcurrentHashMap` (`messenger/MessagesController.java:147` ✓), `ContactsController.contactsDict` too (`messenger/ContactsController.java:238` ✓).
+One instance per account (`getInstance(account)`, the `DownloadController` pattern). Surface: `allows(MessageObject)`, `allows(TLRPC.Message)`, `isTrusted(long dialogId)`, `setMark(long dialogId, int state)` (none / trusted / never), `noteTapped(MessageObject)`, `refresh()`, and a pure static `decide(...)` taking plain values (kind, flags, mark, markedAt, activeDays, now, settings) for the unit test (C2). Called on the UI thread from cell binding (thousands of calls a second while scrolling), so `allows()` first checks the own-message clause, then one lookup in a per-dialog verdict cache (`LongSparseArray<Byte>`, filled lazily, cleared on `refresh()`, on a mark change and on `NotificationCenter.updateInterfaces` with the chat-info or contacts flags; ~15 lines, R2-8), then rule 8 if on. The cache is filled from immutable snapshots: the marks map and the active-user set are replaced whole (`volatile` reference to an unmodifiable copy) by `refresh()` on the storage queue (C14c). `MessagesController.getChat` reads a `ConcurrentHashMap` (`messenger/MessagesController.java:147` ✓), `ContactsController.contactsDict` too (`messenger/ContactsController.java:238` ✓).
 
 ### 2.2 Activity log (A2): count arrivals, not retained rows (C6)
 Own table in the account's cache database, created on first use: `CREATE TABLE IF NOT EXISTS tc_activity(uid INTEGER, day INTEGER, PRIMARY KEY(uid, day))`.
@@ -99,7 +102,7 @@ Own table in the account's cache database, created on first use: `CREATE TABLE I
 
 **Read:** `SELECT uid FROM tc_activity WHERE day >= ?today-D GROUP BY uid HAVING COUNT(*) >= ?N` into the active set. The table holds at most people × 365 rows; the query is trivial. **Prune:** `DELETE FROM tc_activity WHERE day < ?today-365` on refresh. **Refresh:** account start (after contacts load), every 6 h, and on a setting or mark change.
 
-**Backfill, once per account** (flag in prefs): `INSERT OR IGNORE INTO tc_activity SELECT uid, (date + ?tz) / 86400 FROM messages_v2 WHERE uid > 0 AND out = 0 AND date >= ?now-365d` (`messages_v2` schema `:551` ✓; one full scan, on the storage queue, once). Limits: it counts what is still cached, uses one fixed time-zone offset, and cannot tell service rows apart (no `action` column, the message is in the `data` blob), so it may count a few incoming-call days once. Desktop has no equivalent; Android simply starts better.
+**Backfill, once per account** (flag in prefs), in Java so it applies the live feed's rules exactly (R2-5): iterate `SELECT uid, date, data FROM messages_v2 WHERE uid > 0 AND out = 0 AND date >= ?now-365d` (`messages_v2` schema `:551` ✓), deserialize `data` with `TLRPC.Message.TLdeserialize` (the call `MessagesStorage` uses throughout), skip `action != null`, and compute the day with the device zone at that date. One full scan on the storage queue, once; ~25 lines. It counts only what is still cached, so it starts with an approximation that the live feed replaces within `D` days. A third `messages_v2` writer, `putDialogsInternal` (`:17346` ✓, the top message of each dialog), is not hooked: it matters only right after login, when it would add at most one day per person. Desktop has no backfill.
 
 **Survives:** "Clear local database" (`clearLocalDatabase`, `:1416` ✓, deletes a fixed list of stock tables, ~ for not touching ours) and auto-delete timers (rows are logged on arrival). **Lost:** on logout (the database is deleted), as intended.
 
@@ -115,8 +118,10 @@ Why here: the network thumbnails C1 found (video and GIF document thumbs, `curre
 
 Hunk at the top of `setImage(mediaLocation, mediaFilter, imageLocation, imageFilter, thumbLocation, thumbFilter, thumb, size, ext, parentObject, cacheType)` (`messenger/ImageReceiver.java:572` ✓): `if (parentObject instanceof MessageObject && TrustController.gateActive) { Location[] l = TrustController.filter(this, (MessageObject) parentObject, mediaLocation, imageLocation, thumbLocation); mediaLocation = l[0]; imageLocation = l[1]; thumbLocation = l[2]; }`.
 
-`filter` passes everything through unless all hold: trust model and "tap to load" on; `getParentView()` (`:3254` ✓) is a `ChatMessageCell` or `DialogCell` (so the photo viewer, story viewer and instant view, which the user opened, are untouched); the message's chat is not trusted; the message is not in the session's tapped set. Then:
-- If `isForceLoding()` (`:384` ✓) is true, add the message to the tapped set and pass through. Every tap path in `didPressButton` (`ChatMessageCell.java:17854` ✓) sets `setForceLoading(true)` right before its `setImage` (`:17896`, `:17909`, `:17926`, `:17938` ✓); one branch near `:17935` calls `setImage` without it (~: the "already loading" case; its `FileLoader.loadFile` still runs).
+`filter` passes everything through unless all hold: trust model and "tap to load" on; `getParentView()` (`:3254` ✓) is a `ChatMessageCell`, a `DialogCell`, or a `BackupImageView` (the last covers the automatic pinned-message bar, `ui/ChatActivity.java:28630`, `:29947` ✓, and the composer reply/edit bar, `:29943` ✓, which pass the pinned or replied `MessageObject` as parent; ~ that `BackupImageView` gives its receiver itself as parent view); the message is not trusted (`allows()`, which includes your own messages); the message is not in the session's tapped set. Then:
+- **Whitelist, not a viewer blacklist (R2-3):** a blacklist would have to know every viewer class, and some surfaces (the shared-media grid) have no parent view at all, so a blacklist cannot separate "opened by you" from "automatic" without reading every viewer; the whitelist fails open only on surfaces this doc names, and a new cell type shows up in C1's `new ImageReceiver(` count.
+- **Taps:** the tap paths for GIF, video, round video and files call `FileLoader.loadFile` directly and re-enter `setImage` later without `forceLoading` (`ChatMessageCell.java:17899`, `:17915`, `:17920`, `:17933`, then `onSuccessDownload` `:17970`, `:17979`, `:17992`, per R2-1). So A6b: the first statement of `didPressButton` (`:17854` ✓) is `if (TrustController.noteTapped(currentMessageObject)) { currentMessageObject.forceUpdate = true; <rebind with the same arguments as the last setMessageObject, :13328>; return; }`, where `noteTapped` returns true only when it newly adds the message. The first tap rebinds under "allowed" (download, autoplay, existing-file paths run as stock); later taps are stock. `isForceLoding()` (`:384` ✓) stays in G as a belt: when true, add to the tapped set and pass through. The `setImage` without `forceLoading` near `:17935` is the wallpaper case, harmless (R2 read it).
+- Telegram-proxied web files (`webFile != null && !webFile.noproxy`: static maps, `ChatMessageCell.java:9602-9603` ✓, and proxied bot thumbs) pass through (R2-4).
 - Sticker document (`MessageObject.isStickerDocument` `:10271`): animated (`isAnimatedStickerDocument` `:10308`) or video (`isVideoStickerDocument` `:10283`) drops media and image locations and keeps the thumb (static webp) and the `pathThumb` outline; static stickers pass.
 - Anything else keeps a location only if it is local: `photoSize instanceof TL_photoStrippedSize` or `TL_photoPathSize`, or a non-http `path`, or (for photo, not document, locations) `messageObject.mediaExists` (`MessageObject.java:252` ✓). GIF, video and round-video document locations are dropped even when cached, which closes cached autoplay with no `SharedConfig.isAutoplay*` edits.
 
@@ -125,7 +130,7 @@ The `thumb` drawable argument is never touched, so the embedded stripped image s
 Cost: one `instanceof` per `setImage` when the gate is off; when on, a few field reads and set lookups. `setImage` runs thousands of times while scrolling; nothing in `filter` allocates on the pass-through path (return the inputs; allocate the array only when something is dropped).
 
 ### 2.5 Direct-URL web documents (A7, C4)
-`ImageLocation.getForWebFile` turns a noproxy `WebFile` (`messenger/WebFile.java:61-71` ✓) into `imageLocation.path = webFile.url` (`messenger/ImageLocation.java:89-90` ✓), which `ImageLoader` fetches over plain HTTP from your IP. Add `if (webFile.noproxy && TrustController.blockNoProxy()) return null;` before it. Callers then show nothing (inline bot result thumbs in `ui/Cells/ContextLinkCell.java`, rich messages, invoice photos, ~ for each rendering an empty box gracefully). v1 blocks it for trusted bots too: `getForWebFile` has no chat context, and adding it means touching 20 caller files (✓ by grep). Proxied web documents (`location`-based, fetched by Telegram) are untouched.
+`ImageLocation.getForWebFile` turns a noproxy `WebFile` (`messenger/WebFile.java:61-71` ✓) into `imageLocation.path = webFile.url` (`messenger/ImageLocation.java:89-90` ✓), which `ImageLoader` fetches over plain HTTP from your IP. Add `if (webFile.noproxy && TrustController.blockNoProxy()) return null;` before it. Callers then show nothing (inline bot result thumbs in `ui/Cells/ContextLinkCell.java`, rich messages, invoice photos, ~ for each rendering an empty box gracefully). v1 blocks it for trusted bots too: `getForWebFile` has no chat context. v2 is ~5 lines in `ContextLinkCell`, which has the inline result's bot in reach (R2-9e), not the 20 caller files the previous draft feared. Proxied web documents (`location`-based, fetched by Telegram) are untouched.
 
 ### 2.6 Calls (A9)
 `new Instance.Config(..., privateCall.p2p_allowed, ...)` (`messenger/voip/VoIPService.java:3423` ✓) → `&& isTrusted(user.id)`; set `udp_p2p` from the same check at `:1111` (outgoing), `:1880` and `:4360` (accepting) ✓. This governs what our client advertises and what our engine uses. The server-side "Peer-to-peer" privacy rule (`ContactsController.PRIVACY_RULES_TYPE_P2P`) still decides who may go P2P with you when the other side offers it; keep it at "My contacts" or "Nobody" as the floor (C14g; test plan step 8). Group calls go through Telegram's servers (~).
@@ -146,15 +151,15 @@ Prefs file `telegram_custom` (patch 0003's `CustomSettings.prefs()` is private; 
 ## 3. 🖥️ desktop design
 
 ### 3.1 custom_trust (D1)
-`custom/custom_trust.{h,cpp}` beside `custom/custom_settings.*` (patch 0003), added to `Telegram/CMakeLists.txt` the same way. `Custom::Trusted(not_null<PeerData*>)`, `Custom::Allows(not_null<const HistoryItem*>)`, `SetMark`, `NoteIncoming`, pure `Decide(...)` for the test. State per `Main::Session` in a static `base::flat_map` (no upstream class changes). Contacts `UserData::isContact()` (`data/data_user.h:261` ✓), bots `isBot()` (`:205`), self `isSelf()` and service `isServiceUser()` (`data/data_peer.h:274`, `:298` ✓).
+`custom/custom_trust.{h,cpp}` beside `custom/custom_settings.*` (patch 0003), added to `Telegram/CMakeLists.txt` the same way. `Custom::Trusted(not_null<PeerData*>)`, `Custom::Allows(not_null<const HistoryItem*>)`, `SetMark`, `NoteIncoming`, pure `Decide(...)` for the test. State per `Main::Session` in a static `base::flat_map` (no upstream class changes). `Allows` first passes your own non-forwarded messages (`item->out()`, rule 2). Contacts `UserData::isContact()` (`data/data_user.h:261` ✓), bots `isBot()` (`:205`), self `isSelf()` and service `isServiceUser()` (`data/data_peer.h:274`, `:298` ✓).
 
 ### 3.2 Activity log (D2): own log only, no server seeding (C7)
 tdesktop keeps no message database. `NoteIncoming` from `History::createItem` (`history/history.cpp:576` ✓), the point every `MTPMessage` becomes an item, history pages included; stock counts outgoing messages there for top peers (`:595-596` ✓, realtime only), ours runs for `!result->out() && peer->isUser() && !result->isService()` whether or not the message is new. Stored per account as `{peerId: [day, ...]}` pruned to 365 days, batched to disk (dirty flag, atomic `QSaveFile` on a 10 s timer and on quit). **UX, said plainly:** on desktop a contact becomes trusted by the activity rule once they have messaged you on `N` days since install, or once you have scrolled their private chat far enough back to load `N` days. No background requests (the draft's `messages.getHistory` seeding is dropped: new traffic, and `limit=100` under-counts chatty contacts, C7).
 
 ### 3.3 Gates (D3-D8)
-- **Auto-download and autoplay** (`data/data_auto_download.cpp`): `Should(data, peer, document)` `:367`, put the trust check before `if (document->sticker()) return true;` (`:371` ✓) for non-stickers and before `isGifv() → true` (`:377-378` ✓); `Should(data, peer, photo)` `:406`; `ShouldAutoPlay(data, peer, document)` `:426`; `ShouldAutoPlay(data, peer, photo)` `:449` ✓. Autoplay is the `AutoPlay*` types of the same table, so this includes media already cached. The peerless `Should(data, document)` (`:395`) is used only with no item (`data/data_document_media.cpp:333` ✓) and for stickers (below); left alone.
-- **Photo thumbnails, reply photos:** `PhotoMedia::autoLoadThumbnailAllowed(peer)` (`data/data_photo_media.cpp:153-162` ✓) loads Small/Thumbnail whenever they exist; return false when untrusted. Reply previews call it (`data/data_reply_preview.cpp:110-114` ✓).
-- **Document thumbnails, reply documents:** `DocumentData::loadThumbnail(FileOrigin)` (`data/data_document.cpp:870` ✓) is the one function behind `loadThumbnail` at `history_view_gif.cpp:262`, `:1214`, `history_view_document.cpp:455` and `DocumentMedia::thumbnailWanted` (`data/data_document_media.cpp:242-245` ✓, used by replies `data_reply_preview.cpp:78` ✓). Gate: if the origin is a message (`FullMsgId`) and its item is not allowed and the document is not a sticker and not already loaded or loading, return. ~6 lines (~ for the origin variant accessor).
+- **Auto-download and autoplay** (`data/data_auto_download.cpp`): `Should(data, peer, document)` `:367`: one check at `:371` (`if (!document->sticker() && !allowed) return false;`), which also sits above `isGifv() → true` (`:377-378` ✓); `Should(data, peer, photo)` `:406`; `ShouldAutoPlay(data, peer, document)` `:426`; `ShouldAutoPlay(data, peer, photo)` `:449` ✓. Autoplay is the `AutoPlay*` types of the same table, so this includes media already cached. The peerless `Should(data, document)` (`:395`) is used only with no item (`data/data_document_media.cpp:333` ✓) and for stickers (below); left alone.
+- **Photo thumbnails, reply photos:** `PhotoMedia::autoLoadThumbnailAllowed(peer)` (`data/data_photo_media.cpp:153-162` ✓) loads Small/Thumbnail whenever they exist; return false when untrusted. Reply previews call it (`data/data_reply_preview.cpp:110-114` ✓), but only when inline bytes exist: with none, `:110` fetches `Size::Small` regardless, so the condition there also gets the trust check (1 line, R2-9d).
+- **Document thumbnails, reply documents:** `DocumentData::loadThumbnail(FileOrigin)` (`data/data_document.cpp:870` ✓) is the one function behind `loadThumbnail` at `history_view_gif.cpp:262`, `:1214`, `history_view_document.cpp:455` and `DocumentMedia::thumbnailWanted` (`data/data_document_media.cpp:242-245` ✓, used by replies `data_reply_preview.cpp:78` ✓). Gate: if the origin is a `FileOriginMessage`, its item (`session().data().message(...)`) exists and is not allowed, and the document is not a sticker and not already loaded or loading, return. A null item (a reply whose target is not loaded) fails open, as stock (R2-9c). ~6 lines.
 - **Link previews:** large image through `Photo::automaticLoad` (gated above); the side image calls `_photoMedia->wanted(PhotoSize::Thumbnail, ...)` unconditionally (`history/view/media/history_view_web_page.cpp:944` ✓); gate it with `_parent->data()`.
 - **Stickers static (D5):** in-chat stickers load through `checkStickerLarge()` → `automaticLoad(origin, nullptr)` (`data_document_media.cpp:288` ✓), i.e. with no peer, so `data_auto_download.cpp` cannot see the chat. Gate in `Sticker::readyToDrawAnimationFrame` (`history/view/media/history_view_sticker.cpp:190-195` ✓): when the item is not allowed and the sticker is animated or video, skip `checkStickerLarge()` and `setupPlayer()`, so the view keeps drawing its thumbnail (loaded at `:103` ✓). Covers cached stickers too. Clicking a sticker opens its pack (stock, ~).
 - **Direct-URL web documents (D6):** `FromWebDocument` maps `MTPDwebDocumentNoProxy` to `PlainUrlLocation` (`ui/image/image_location_factory.cpp:306`, `:320-331` ✓), downloaded by `storage/file_download_web.cpp` from your IP; return an empty `ImageLocation()` while the trust model is on.
@@ -177,7 +182,7 @@ Global settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, pat
 ## 4. 🧪 test plan
 
 ### 4.1 Caller-count guard (C1, C11)
-`.github/media-callers.txt`: one line per `platform<TAB>pattern<TAB>file<TAB>count`, counted on the **upstream** tree before patches apply. Patterns: Android `canDownloadMedia(`, `canDownloadMediaType(`, `canPreloadStories(`, `getCurrentDownloadMask(`, `computeAutoDownload(`, `getForWebFile(`, `preloadStory(`, `udp_p2p`; desktop `AutoDownload::Should(`, `AutoDownload::ShouldAutoPlay(`, `autoLoadThumbnailAllowed(`, `loadThumbnail(`, `thumbnailWanted(`, `checkStickerLarge(`, `startPreloading(`, `PlainUrlLocation`, `f_udp_p2p`. `.github/media-callers.sh check <platform> <tree>` greps, prints a diff and exits 1 on any change; `update` rewrites the platform's lines. A step in `android.yml` and `desktop.yml` right after checkout, so the upstream workflow's red path (an issue naming the failed step) names the new caller. The table is updated in the same commit as each port, after reading every new caller.
+`.github/media-callers.txt`: one line per `platform<TAB>pattern<TAB>file<TAB>count`, counted on the **upstream** tree before patches apply. Patterns: Android `canDownloadMedia(`, `canDownloadMediaType(`, `canPreloadStories(`, `getCurrentDownloadMask(`, `computeAutoDownload(`, `getForWebFile(`, `preloadStory(`, `udp_p2p`, `new ImageReceiver(` (G is load-bearing: a new file here is a new image surface to classify against G's whitelist); desktop `AutoDownload::Should(`, `AutoDownload::ShouldAutoPlay(`, `autoLoadThumbnailAllowed(`, `loadThumbnail(`, `thumbnailWanted(`, `checkStickerLarge(`, `startPreloading(`, `PlainUrlLocation`, `f_udp_p2p`. `.github/media-callers.sh check <platform> <tree>` greps and exits 1 only when a pattern appears in a **new file** or a known file's count **drops to zero** (a hook site vanished); a count change inside a known file prints a warning to the build log and the port commit message, not a failure (R2-7: upstream churns those files every release, and a guard that is always red gets updated blind). `update` rewrites the platform's lines. A step in `android.yml` and `desktop.yml` right after checkout, so the upstream workflow's red path (an issue naming the failed step) names the new caller. The table is updated in the same commit as each port, after reading every new caller.
 
 ### 4.2 Without a device
 - CI builds both patches; C1 passes.
@@ -196,6 +201,9 @@ Global settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, pat
 8. Settings → Privacy → Calls → Peer-to-peer is "My contacts" or "Nobody" on the account (the server-side floor).
 9. Stories of an untrusted peer open with a loading spinner; trusted ones open instantly.
 10. An inline bot whose results used direct URLs shows empty thumbnails (expected).
+11. Tap a GIF and a video in an untrusted group: the GIF plays in place, the video plays; a GIF already cached from a trusted chat also needs one tap, then plays.
+12. A photo you sent from the phone into an untrusted chat loads on the laptop without a tap; a forward of a stranger's photo does not.
+13. A pinned message with a photo in an untrusted chat shows a blurred thumbnail in the pinned bar; a shared location shows its map.
 
 ## 5. ⚠️ risks
 
@@ -214,7 +222,7 @@ Global settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, pat
 
 **The real risk is a new caller that compiles** (rich messages were one): C1 turns it into a red build. G narrows the residual further on Android, because any new cell path that passes the message as `parentObject` is covered without being listed.
 
-**G-specific risks:** a stock path that loads a message image in a cell without `forceLoading` after a tap (one branch near `ChatMessageCell.java:17935`, ~) leaves that item blurred until the next tap; a downloaded video or GIF shows its blurred thumbnail after a restart until tapped again (the tapped set is per session; the cached file plays instantly on tap). Both fail closed.
+**G-specific risks:** a new tap path that bypasses `didPressButton` (e.g. a future in-cell control) leaves its item blurred; a downloaded video or GIF shows its blurred thumbnail after a restart until tapped once (the tapped set is per session; the cached file plays instantly). Both fail closed. A `BackupImageView` in a viewer that passes a `MessageObject` as parent would show blurred there (~, none found by the critique). The `didPressButton` hunk is one statement under a signature stable for years; low-medium churn.
 
 **False untrust (safe, annoying):** fresh desktop install; a contact who only calls; a friend who writes in one burst a month; people who write only in shared groups. The fix is a hand mark (which decays the same way, so lower `N` or raise `grace`).
 
@@ -235,6 +243,7 @@ Global settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, pat
 9. **Desktop: stock "Always"/"Never" lists count as trust marks:** yes. Default, user to confirm.
 10. **Telegram service account 777000 trusted:** yes. Default, user to confirm.
 11. **Per-device marks, no sync:** yes. Default, user to confirm.
+12. **Your own forwards of others' media stay gated:** yes (only your own original messages are exempt). Default, user to confirm.
 
 ## 7. 📝 critique 1 dispositions
 
@@ -254,3 +263,17 @@ Global settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, pat
 | 12 | Fixed: per-device scope paragraph |
 | 13 | Taken: first-block toast + state-first labels |
 | 14 | a: service messages excluded; b: games covered by G; c: snapshot reads; d: check before `make_unique`; e: claim narrowed; f: repaint on mark change; g: server P2P floor in the test plan |
+
+**Critique 2**
+
+| R2 | Disposition |
+|---|---|
+| 1 | Fixed: A6b, first statement of `didPressButton` marks the message tapped and rebinds; `isForceLoding()` kept as a belt |
+| 2 | Fixed: rule 2 exempts your own non-forwarded messages, both platforms |
+| 3 | Fixed by extending the whitelist with `BackupImageView` (pinned and composer bars); shared-media grid listed under "Not covered" (you open it); reason for whitelist over blacklist in 2.4 |
+| 4 | Fixed: proxied web files pass G; maps in the test plan |
+| 5 | Taken: Java backfill with the live feed's rules; "starts better" reworded; `putDialogsInternal` noted |
+| 6 | Fixed: anchors in files earlier patches touch now say "after 0004 applies" and cite the nearest stock line |
+| 7 | Taken: fail on new files and zero counts, warn on count changes; `new ImageReceiver(` added |
+| 8 | Taken: per-dialog verdict cache |
+| 9 | a: one check at `:371`; c: null item fails open; d: reply `:110` gated; e: v2 bot exception ~5 lines; f: noted; g: G hunk is the first statement at `:573` |
