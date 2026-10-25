@@ -51,14 +51,16 @@ caption=$(
 api="https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN"
 reply=$(mktemp)
 # Bot API limits: 50 MB per uploaded file, 1024 characters per caption.
+# --form-string: with -F a value starting with < or @ (the caption, an
+# @channel) would be read as a file name.
 if (( $(stat -c %s "$file") < 50000000 && ${#caption} <= 1024 )); then
     how="the file"
-    code=$(curl -sS -o "$reply" -w '%{http_code}' -F chat_id="$TELEGRAM_CHANNEL_ID" \
-        -F parse_mode=HTML -F caption="$caption" -F document=@"$file" "$api/sendDocument")
+    code=$(curl -sS -o "$reply" -w '%{http_code}' --form-string chat_id="$TELEGRAM_CHANNEL_ID" \
+        --form-string parse_mode=HTML --form-string caption="$caption" -F document=@"$file" "$api/sendDocument")
 else
     how="a link ($(( $(stat -c %s "$file") / 1000000 )) MB is over the bot upload limit)"
-    code=$(curl -sS -o "$reply" -w '%{http_code}' -F chat_id="$TELEGRAM_CHANNEL_ID" \
-        -F parse_mode=HTML -F text="$caption" "$api/sendMessage")
+    code=$(curl -sS -o "$reply" -w '%{http_code}' --form-string chat_id="$TELEGRAM_CHANNEL_ID" \
+        --form-string parse_mode=HTML --form-string text="$caption" "$api/sendMessage")
 fi
 if [[ $code != 200 ]]; then
     echo "::error::Telegram refused the post (HTTP $code): $(jq -r .description "$reply" 2>/dev/null || cat "$reply")"
