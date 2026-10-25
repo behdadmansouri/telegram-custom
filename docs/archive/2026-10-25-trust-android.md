@@ -63,3 +63,7 @@ Defaults as §1: on, N 3, D 90, grace 90, rule 4 on, rule 7 on, rule 8 off, tap 
 
 | Round | Run | Result |
 |---|---|---|
+| 1 | 40169152187 | first cut (before deviations 8-9); guard and rule tests green; cancelled during Build once round 2 passed, superseded |
+| 2 | 40169455722 | green on the first compile: guard, rule tests, `assembleAfatRelease`, artifact `tg-custom-android-0aae9598…` (37 MB) |
+
+Untested on a device: everything in docs/trust.md 4.3 (Android steps) is the user's phone pass.
