@@ -21,6 +21,7 @@
 
 - [ ] 🧍 **Gallery: a hidden folder drops out of All media** - attach → album name at top → long-press e.g. Documents; it reads "· hidden" and its photos leave All media.
 - [ ] 🧍 **Send and move to trash** - long-press send → Send and move to trash; after the upload one Android dialog asks to trash the originals.
+- [ ] 🧍 **Build number shows after the version** - Android: Settings footer ends "· TG Custom b<run>"; desktop: ☰ footer reads "Version 7.2.5 · b<run> – About". The number matches the release tag's `-b<run>`.
 
 - [ ] 🤖 **Each `main` release has an attestation and a channel post** - `gh attestation verify` on the APK; the post in the channel.
 
