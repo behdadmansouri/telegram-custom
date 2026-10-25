@@ -40,10 +40,10 @@ four extra slots cost some memory and startup time even when empty.
  5 files changed, 17 insertions(+), 7 deletions(-)
 
 diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
-index 32d590e8..4cf99856 100644
+index 0049402f..ec0b2f0e 100644
 --- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
 +++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
-@@ -150,9 +150,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
+@@ -151,9 +151,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
              static ConnectionsManager instance3(3);
              return instance3;
          case 4:
@@ -64,11 +64,11 @@ index 32d590e8..4cf99856 100644
  }
  
 diff --git a/TMessagesProj/jni/tgnet/Defines.h b/TMessagesProj/jni/tgnet/Defines.h
-index 80c1c2a0..9886ff2f 100644
+index 36f86bbd..c6fdd0af 100644
 --- a/TMessagesProj/jni/tgnet/Defines.h
 +++ b/TMessagesProj/jni/tgnet/Defines.h
 @@ -27,7 +27,7 @@
- #define DOWNLOAD_CONNECTIONS_COUNT 2
+ #define DOWNLOAD_CONNECTIONS_COUNT 8
  #define UPLOAD_CONNECTIONS_COUNT 4
  #define CONNECTION_BACKGROUND_KEEP_TIME 10000
 -#define MAX_ACCOUNT_COUNT 5
@@ -77,10 +77,10 @@ index 80c1c2a0..9886ff2f 100644
  
  #define USE_IPV4_ONLY 0
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-index d6901d26..674a9fd6 100644
+index ac2f0cb7..ed00d1a7 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
-@@ -201,7 +201,8 @@ public class NotificationsController extends BaseController implements Notificat
+@@ -202,7 +202,8 @@ public class NotificationsController extends BaseController implements Notificat
  
      public NotificationsController(int instance) {
          super(instance);

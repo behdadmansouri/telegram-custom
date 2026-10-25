@@ -23,10 +23,10 @@ default on; no settings UI yet.
  2 files changed, 39 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
-index 356a2924..b3a35e8c 100644
+index 4301002d..76f61e45 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
-@@ -150,4 +150,39 @@ public class CustomSettings {
+@@ -159,4 +159,39 @@ public class CustomSettings {
          }
          prefs().edit().putStringSet("hiddenGalleryBuckets", set).apply();
      }
@@ -67,10 +67,10 @@ index 356a2924..b3a35e8c 100644
 +    }
  }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-index f982c7e9..849f209d 100644
+index 9dff5532..7ea10cdc 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-@@ -12587,6 +12587,8 @@ public class ChatActivity extends BaseFragment implements
+@@ -12690,6 +12690,8 @@ public class ChatActivity extends BaseFragment implements
                          final HashMap<Object, Object> selectedPhotos = chatAttachAlert.getPhotoLayout().getSelectedPhotos();
                          final ArrayList<Object> selectedPhotosOrder = chatAttachAlert.getPhotoLayout().getSelectedPhotosOrder();
                          if (!selectedPhotos.isEmpty()) {
@@ -79,7 +79,7 @@ index f982c7e9..849f209d 100644
                              final int albumsCount = (int) Math.ceil(selectedPhotos.size() / 10f);
                              for (int i = 0; i < albumsCount; ++i) {
                                  int count = Math.min(10, selectedPhotos.size() - (i * 10));
-@@ -12642,9 +12644,9 @@ public class ChatActivity extends BaseFragment implements
+@@ -12745,9 +12747,9 @@ public class ChatActivity extends BaseFragment implements
                                  if (editingMessageObject != null && editingMessageObject.needResendWhenEdit()) {
                                      MessageSuggestionParams params = messageSuggestionParams != null ?
                                          messageSuggestionParams : MessageSuggestionParams.of(editingMessageObject.messageOwner.suggested_post);

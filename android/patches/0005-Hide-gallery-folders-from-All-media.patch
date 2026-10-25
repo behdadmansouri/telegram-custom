@@ -44,10 +44,10 @@ index 5014cc59..356a2924 100644
 +    }
  }
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-index 9c443be5..1fad9657 100644
+index 8f57d649..d95b2d13 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
-@@ -6120,6 +6120,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -6516,6 +6516,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
              }
              Integer mediaCameraAlbumId = null;
              Integer photoCameraAlbumId = null;
@@ -55,7 +55,7 @@ index 9c443be5..1fad9657 100644
  
              Cursor cursor = null;
              try {
-@@ -6161,21 +6162,22 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -6557,21 +6558,22 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                              long size = cursor.getLong(sizeColumn);
  
                              PhotoEntry photoEntry = new PhotoEntry(bucketId, imageId, dateTaken, path, orientation, 0, false, width, height, size);
@@ -83,7 +83,7 @@ index 9c443be5..1fad9657 100644
  
                              AlbumEntry albumEntry = mediaAlbums.get(bucketId);
                              if (albumEntry == null) {
-@@ -6259,8 +6261,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -6655,8 +6657,9 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                              int orientation = 0;
  
                              PhotoEntry photoEntry = new PhotoEntry(bucketId, imageId, dateTaken, path, orientation, (int) (duration / 1000), true, width, height, size);
@@ -94,7 +94,7 @@ index 9c443be5..1fad9657 100644
                                  allVideosAlbum = new AlbumEntry(0, LocaleController.getString(R.string.AllVideos), photoEntry);
                                  allVideosAlbum.videoOnly = true;
                                  int index = 0;
-@@ -6272,12 +6275,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+@@ -6668,12 +6671,12 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
                                  }
                                  mediaAlbumsSorted.add(index, allVideosAlbum);
                              }

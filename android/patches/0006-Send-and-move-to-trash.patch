@@ -125,10 +125,10 @@ index 00000000..41459e69
 +    }
 +}
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-index 28534c59..0537b3b1 100644
+index 8a33d8a3..d18c8127 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlert.java
-@@ -4001,6 +4001,21 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
+@@ -4036,6 +4036,21 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                      }
                  });
              }

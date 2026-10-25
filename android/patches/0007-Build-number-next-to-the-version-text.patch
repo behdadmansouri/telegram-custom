@@ -15,10 +15,10 @@ GITHUB_RUN_NUMBER.
  3 files changed, 11 insertions(+), 2 deletions(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-index 5fd7e2c8..7d7e3558 100644
+index efa8e295..f45e1e9c 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/AndroidUtilities.java
-@@ -6658,7 +6658,7 @@ public class AndroidUtilities {
+@@ -6667,7 +6667,7 @@ public class AndroidUtilities {
                      }
                      break;
              }
@@ -48,10 +48,10 @@ index 356a2924..4301002d 100644
          return ApplicationLoader.applicationContext.getSharedPreferences("telegram_custom", Context.MODE_PRIVATE);
      }
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-index 59c2289a..39d63303 100644
+index c0f95107..e48312c6 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
-@@ -938,7 +938,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+@@ -958,7 +958,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                      }
                      break;
              }
