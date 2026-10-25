@@ -30,6 +30,7 @@ published there with its checksum and the patch list (with line counts) it was b
 | Notifications without the built-in few-second delay | | ✓ |
 | Hide gallery folders (e.g. Documents) from "All media" in the picker | ✓ | |
 | Send and move to trash: originals go to the system trash once uploaded | ✓ | |
+| 8 logged-in accounts, no Premium needed (stock: 3, or 4 / 6 with Premium) | ✓ | ✓ |
 
 Beyond the patches, the build changes only identity: package / app id, name, a purple icon, its own
 signing key and its own `api_id` (see [`android/customize.sh`](android/customize.sh),
