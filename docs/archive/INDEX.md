@@ -6,3 +6,5 @@ Evidence: dated research and readouts, frozen once read. Conclusions live in `do
 |---|---|---|
 | 2026-10-25-feasibility.md | source check (file:line) for auto-update, per-photo captions, account limit, version label, hardening defaults | 2026-10-25 |
 | 2026-10-25-night.md | log of the overnight batch-2 run | 2026-10-25 |
+| 2026-10-25-trust-critique-1.md | critique round 1 of docs/trust.md: 14 numbered objections checked against DrKLO 9552e554/0aae9598 and tdesktop v7.2.5, verdict at the end | 2026-10-25 |
+| 2026-10-25-trust-critique-2.md | critique round 2 of the revised docs/trust.md: G gate and tc_activity feeds verified at 0aae9598/v7.2.5, 9 objections, verdict at the end | 2026-10-25 |
