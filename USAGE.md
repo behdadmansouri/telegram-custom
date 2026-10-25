@@ -1,16 +1,19 @@
 # Using Telegram Custom 📨
 
 ## 🖥️ desktop
-1. **From GitHub (default):** a push touching `desktop/` builds automatically (Actions → **desktop**).
-   Install the newest successful build: `desktop/install.sh --from-ci`
-   (needs Manjaro stable up to date: the build links against the current stable libs).
-2. **Or locally:** build deps once (build-only, safe to remove later):
-   `sudo pacman -S --needed boost boost-libs cmake git glib2-devel gobject-introspection qt6-shadertools gperf libtg_owt microsoft-gsl ninja python range-v3 tl-expected vulkan-headers`
-   then `desktop/build.sh` (first run ~30-60 min; `JOBS=6` is faster but uses more RAM). It installs at the end.
-3. Launch **Telegram Custom** from the app menu. Its data lives in `~/.local/share/TelegramCustom`,
+1. **Built on GitHub only.** A push to `main` touching `desktop/` builds (~1h45 without cache) and
+   publishes a Release. Nothing gets built on the laptop.
+2. **Install or update:** `desktop/install.sh --release`. It fetches the newest desktop Release,
+   checks it was built by this repo's workflow, keeps the current build as `.prev`, and says "up to
+   date" when there is nothing new. It refuses (and changes nothing) if a library is missing: update
+   Manjaro first, since CI links against the current stable libs. If Telegram Custom is open, quit and
+   reopen it to switch.
+3. **A feature-branch build** (not released): Actions → **desktop** → Run workflow → pick the branch,
+   then `desktop/install.sh --from-ci` (newest successful run on any branch).
+4. Launch **Telegram Custom** from the app menu. Its data lives in `~/.local/share/TelegramCustom`,
    separate from the official client, so it needs its own login.
-4. Broken build? `desktop/install.sh --rollback` swaps the previous one back.
-5. **Ghost mode:** ☰ menu → Ghost mode. **Folder counter:** right-click a folder tab → Hide/Show unread counter.
+5. Broken build? `desktop/install.sh --rollback` swaps the previous one back.
+6. **Ghost mode:** ☰ menu → Ghost mode. **Folder counter:** right-click a folder tab → Hide/Show unread counter.
 
 ## 📱 android
 1. **Download:** the repo's **Releases** page, newest "Android" release → the `.apk`. A push to
@@ -27,26 +30,35 @@
    if any send fails. Android 11+.
 
 ## 🔁 updating from upstream
-- Desktop: edit `desktop/UPSTREAM` (version + the two hashes from the Arch PKGBUILD at that tag), rerun `desktop/build.sh`.
+- Desktop: edit `desktop/UPSTREAM` (version + the two hashes from the Arch PKGBUILD at that tag), push to `main`.
 - Android: paste the newest `update to X` commit sha from DrKLO/Telegram into line 1 of `android/UPSTREAM`, push.
 
 ## 📣 announcements
-Every `main` release is posted to a Telegram channel by a bot, once these exist:
-1. @BotFather → `/newbot` → copy the token.
-2. Make the bot an admin of the channel with "Post messages".
-3. `gh secret set TG_BOT_TOKEN` (paste the token when it asks, so it never lands in shell history).
-4. `gh secret set TG_CHANNEL --body @yourchannel` (a private channel: its `-100...` id instead).
+Every `main` release is posted to a Telegram channel by a bot (the file if under 50 MB, else a
+link, with what changed since the last release). Until both secrets exist the step skips with a
+notice and releases still publish. Setup:
+1. @BotFather → `/newbot` → keep the token it shows.
+2. Channel → Administrators → Add admin → the bot, with "Post messages".
+3. The channel id: a public channel is `@name` (plain `@`). A private one: forward any post from it
+   to @userinfobot, which replies with the id (`-100…`, minus sign included).
+4. `gh secret set TELEGRAM_BOT_TOKEN -R behdadmansouri/telegram-custom` (paste at the prompt, so
+   it stays out of shell history), then the same for `TELEGRAM_CHANNEL_ID`.
+5. Check it without a build: Actions → **announce** → Run workflow; it re-posts the newest release.
 
 ## 🌿 branches
 `main` = what CI builds and publishes. A new feature lives on its own branch until it has been
 tried on the device (a workflow run on the branch), then merges to `main`.
 
 ## ✏️ writing an Android patch
-1. Edit inside `~/.cache/telegram-custom/android-src` (branch `custom` = upstream + our patches), commit.
-2. From the project root: `git -C ~/.cache/telegram-custom/android-src format-patch -N --zero-commit $(head -1 android/UPSTREAM) -o "$PWD/android/patches"`
+A source tree only for the edit (~0.5 GB), deleted after; never a build.
+1. Once per patch: `git clone --filter=blob:none https://github.com/DrKLO/Telegram ~/.cache/telegram-custom/android-src`,
+   then in it `git checkout -B custom $(head -1 <project>/android/UPSTREAM)` and `git am <project>/android/patches/*.patch`.
+2. Edit, commit. From the project root: `git -C ~/.cache/telegram-custom/android-src format-patch -N --zero-commit $(head -1 android/UPSTREAM) -o "$PWD/android/patches"`
 3. Push to a branch and run the **android** workflow on it; CI applies the series to a clean checkout, so the patch files are the truth.
 
 ## ✏️ writing a desktop patch
-1. Edit inside `~/.cache/telegram-custom/src/tdesktop-<ver>-full` (a git tree; branch `custom` = upstream + our patches), commit.
-2. From the project root: `git -C ~/.cache/telegram-custom/src/tdesktop-<ver>-full format-patch -N --zero-commit upstream -o "$PWD/desktop/patches"`
-3. `desktop/build.sh` resets the tree and re-applies the whole series, so the patch files are the truth.
+A source tree only for the edit (~0.5 GB), deleted after; never a build.
+1. `desktop/build.sh --tree` unpacks the pinned tarball into `~/.cache/telegram-custom/src/tdesktop-<ver>-full`
+   (a git tree; tag `upstream` = stock, branch `custom` = upstream + our patches).
+2. Edit there, commit. From the project root: `git -C ~/.cache/telegram-custom/src/tdesktop-<ver>-full format-patch -N --zero-commit upstream -o "$PWD/desktop/patches"`
+3. Push to a branch, run the **desktop** workflow on it, try it with `desktop/install.sh --from-ci`. Then `rm -rf ~/.cache/telegram-custom`.

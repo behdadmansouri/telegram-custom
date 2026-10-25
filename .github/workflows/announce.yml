@@ -1,0 +1,39 @@
+name: announce
+
+# Re-post the newest release of a platform to the Telegram channel, without a
+# build: the quick check that TELEGRAM_BOT_TOKEN / TELEGRAM_CHANNEL_ID work.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        type: choice
+        options: [android, desktop]
+        default: android
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PLATFORM: ${{ inputs.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Newest release
+        run: |
+          tag=$(gh release list -L 100 --exclude-drafts --json tagName -q '.[].tagName' | grep "^$PLATFORM-v" | head -1 || true)
+          [[ -n $tag ]] || { echo "::error::no $PLATFORM release yet"; exit 1; }
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          git checkout -q "$(gh release view "$tag" --json targetCommitish -q .targetCommitish)"
+          gh release download "$tag" -p '*.apk' -p '*.tar.gz' -D "$RUNNER_TEMP/out"
+
+      - name: Announce on Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: .github/announce.sh "$PLATFORM" "$RELEASE_TAG" "$RUNNER_TEMP"/out/*

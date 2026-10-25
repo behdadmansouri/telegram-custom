@@ -72,3 +72,17 @@ What is missing is proof that the *binary* people download came from that source
 | 5 | Signing-key fingerprint in the README | future APKs come from the same key | 1 line | **done** |
 | 6 | Reproducible builds (anyone rebuilds, gets the same bytes) | strongest proof there is | large: timestamps, NDK paths, signing | no, for now |
 | 7 | Third-party audit, or live traffic auditing | real assurance on upstream's own network behaviour | beyond a hobby project; upstream's traffic is Telegram's anyway | no |
+
+## 🗺️ batch 2 (user, 2026-10-25)
+
+Decisions: upstream bumps release straight to `main` when patches apply and the build passes; the phone updates through Obtainium (no in-app updater, keeps patch-lint's no-network promise); several photos with their own captions are sent ungrouped automatically; hardening is trust-based (below); each client gets a "what's custom" section of cards. Evidence for every "N lines" claim: [archive/2026-10-25-feasibility.md](archive/2026-10-25-feasibility.md).
+
+1. **Auto-upstream.** A daily workflow compares `android/UPSTREAM` with DrKLO's newest `update to X` commit and `desktop/UPSTREAM` with the `telegram-desktop` version in Manjaro stable (hashes from the Arch PKGBUILD at that version). A newer one is committed to a branch `upstream/<platform>-<ver>` and built; green → `main` fast-forwards, Release, channel post; red → a GitHub issue naming the failed step.
+2. **Laptop auto-update.** A daily systemd user timer runs `desktop/install.sh --release`; a desktop notification says when a new build is in place (reopen to switch) or why it was refused.
+3. **Phone auto-update.** Obtainium tracks this repo's Releases (title `^Android`, asset `\.apk$`). Our build's own update check is already dead (feasibility A3).
+4. **Small patches, one branch `batch-2` on top of `android-gallery-trash`:** own build number next to the version (Android Settings footer, desktop main menu); several captioned photos auto-ungroup (Android); 8 accounts on both platforms.
+5. **Trust model** (both platforms). Trusted: chats you trust by hand (groups, channels, bots, people); channels and groups you admin; contacts who messaged you on ≥3 separate days in the last 90. A hand-trusted person drops back to the activity rule once they stop messaging. Every number and rule is a setting. In an untrusted chat nothing loads on its own (only the blurred thumbnail), nothing autoplays, stories don't preload, link preview images wait for a tap, and calls go through Telegram's relay (P2P only with trusted people: a direct call shows the other side your IP). Design and critique: `docs/trust.md`.
+6. **More hardening**, to confirm: no link-preview fetch while typing (the URL reaches Telegram before you send); no previews in secret chats; animated and video stickers static until tapped in untrusted chats (video stickers go through the ffmpeg decoder); local-only drafts; strip the Google/Firebase libraries from the APK.
+7. **"What's custom" section** in Settings (Android) and the main menu (desktop): one card per patch with a stock-vs-ours picture, one line, its toggle where it has one, and "Show me" jumping to where it lives.
+
+Link previews, for the record: the preview is fetched by Telegram's servers, so opening one does not show the link's owner your IP; the only risk is the image decoder, the same as any photo, hence the trust gate rather than a ban.

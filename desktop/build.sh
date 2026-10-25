@@ -3,7 +3,13 @@
 # Manjaro's system libs (the Arch PKGBUILD recipe), installed to its own prefix
 # with its own data dir. Never touches the pacman telegram-desktop.
 #
-# Usage: desktop/build.sh [--fetch-only]
+# Builds run on GitHub (.github/workflows/desktop.yml); the laptop installs the
+# Release (desktop/install.sh --release) and keeps no build tree.
+#
+# Usage: desktop/build.sh            (CI)
+#        desktop/build.sh --tree     (only the patched git tree, for writing a
+#                                     patch; see USAGE.md, delete it after)
+#        desktop/build.sh --fetch-only
 # Env:   JOBS (default 4), TG_API_ID/TG_API_HASH (or put them in .env),
 #        KEEP_GOING=1 to collect every compile error in one run
 set -euo pipefail
@@ -37,8 +43,10 @@ if [[ ! -f $tarball ]]; then
     mv "$tarball.part" "$tarball"
 fi
 echo "$TDESKTOP_SHA512  $tarball" | sha512sum -c --quiet
-[[ -d $td ]] || git clone -q https://github.com/tdlib/td.git "$td"
-git -C "$td" checkout -q "$TD_COMMIT"
+if [[ ${1:-} != --tree ]]; then
+    [[ -d $td ]] || git clone -q https://github.com/tdlib/td.git "$td"
+    git -C "$td" checkout -q "$TD_COMMIT"
+fi
 [[ ${1:-} == --fetch-only ]] && exit 0
 
 # 2. unpack into a git tree (tag "upstream") so patches are plain git commits
@@ -63,6 +71,10 @@ if (( ${#patches[@]} )); then
     git -C "$tree" -c user.name=custom -c user.email=custom@localhost am -q "${patches[@]}"
 fi
 echo "patches: ${#patches[@]}"
+if [[ ${1:-} == --tree ]]; then
+    echo "patched tree: $tree (branch custom; tag upstream = stock)"
+    exit 0
+fi
 # Purple logo: generated from the stock PNGs, committed so the tree stays clean.
 python3 "$here/purple.py" "$tree"
 git -C "$tree" -c user.name=custom -c user.email=custom@localhost commit -qam "generated: purple icons"

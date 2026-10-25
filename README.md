@@ -27,9 +27,9 @@ published there with its checksum and the patch list (with line counts) it was b
 | Premium-only custom emoji hidden instead of shown locked | ✓ | ✓ |
 | Hide the unread counter of chosen folders (long-press / right-click the folder tab) | ✓ | ✓ |
 | Ghost mode: no read receipts, typing status or online status | ✓ | ✓ |
+| Notifications without the built-in few-second delay | | ✓ |
 | Hide gallery folders (e.g. Documents) from "All media" in the picker | ✓ | |
 | Send and move to trash: originals go to the system trash once uploaded | ✓ | |
-| Notifications without the built-in few-second delay | | ✓ |
 
 Beyond the patches, the build changes only identity: package / app id, name, a purple icon, its own
 signing key and its own `api_id` (see [`android/customize.sh`](android/customize.sh),

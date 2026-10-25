@@ -1,8 +1,8 @@
 name: desktop
 
 # Builds in a Manjaro container against Manjaro stable's own libs, so the
-# binary runs on an up-to-date Manjaro stable machine (same recipe as a local
-# desktop/build.sh). Install on the laptop with: desktop/install.sh --from-ci
+# binary runs on an up-to-date Manjaro stable machine. The only place desktop
+# is built. Install or update on the laptop with: desktop/install.sh --release
 
 on:
   workflow_dispatch:
@@ -46,6 +46,8 @@ jobs:
           nproc; free -g; df -h /
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # announce.sh: changelog since the previous release
 
       - name: Patch lint
         run: bash .github/patch-lint.sh
@@ -89,8 +91,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHANNEL: ${{ secrets.TG_CHANNEL }}
         run: |
           command -v gh > /dev/null || pacman -S --noconfirm --needed github-cli > /dev/null
           .github/release.sh desktop "$APP_VERSION" "tdesktop v$APP_VERSION" out/*.tar.gz
+
+      # Skips with a notice while the two secrets are unset (see USAGE.md).
+      - name: Announce on Telegram
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: .github/announce.sh desktop "$RELEASE_TAG" out/*.tar.gz

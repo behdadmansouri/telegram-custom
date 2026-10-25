@@ -4,3 +4,6 @@
 - 2026-09-23: first desktop build installed locally (7.2.5 + no ads, unusable emoji hidden, per-folder counters, ghost mode, no notify delay, purple logo, own app id).
 - 2026-09-23: builds switched to own api_id (secrets + .env).
 - 2026-09-23: first desktop CI build (Manjaro container, own api_id) installed via install.sh --from-ci.
+- 2026-10-24: desktop builds on GitHub only; every `main` build publishes a Release, installed or updated with `desktop/install.sh --release` (provenance-checked).
+- 2026-10-24: releases post to a Telegram channel (file or link + what changed), via `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHANNEL_ID`; manual **announce** workflow to test the bot.
+- 2026-10-24: first desktop Release (desktop-v7.2.5-b7) installed via `install.sh --release`; local source/build cache (6.7 GB) deleted.
