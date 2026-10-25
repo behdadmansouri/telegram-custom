@@ -44,3 +44,6 @@ Defaults as §1: on, N 3, D 90, grace 90, rule 4 on, rule 7 on, rule 8 off, tap 
 | Round | Run | Result |
 |---|---|---|
 | 1 | 40164174984 | guard + rule tests green; one compile error (`GenericBox::addRow` needs an `RpWidget`, `NumberInput` is a `QLineEdit`): wrapped each number field in a `FixedHeightWidget`, as `send_files_box.cpp` does. Every other file compiled (`-k 0`) |
+| 2 | 40165735905 | green: compiled and linked, artifact `telegram-custom-desktop` |
+
+Untested on a device: everything in docs/trust.md 4.3 (desktop steps) is the user's laptop pass.
