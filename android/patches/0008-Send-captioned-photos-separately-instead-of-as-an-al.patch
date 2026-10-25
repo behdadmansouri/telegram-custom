@@ -1,0 +1,96 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: telegram-custom <telegram-custom@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 00:00:34 -0400
+Subject: [PATCH] Send captioned photos separately instead of as an album
+
+Pick several photos or videos in the attach sheet, open them in the
+viewer and give two or more of them different captions, then send (the
+sheet's send button or the viewer's): they go out as separate messages,
+each with its own caption, exactly like "Send without grouping". Stock
+sends an album, and an album with 2+ captions shows none of them.
+
+Everything else stays an album as before: no caption or one caption
+(the attach bar's text field counts as one, on the first item), the
+same caption on every item ("caption for all media" mode), send as
+file (document albums show every caption), paid media, and editing.
+
+One decision point in ChatActivity, before prepareSendingMedia, covers
+both send buttons. Stored as CustomSettings key "autoUngroupCaptioned",
+default on; no settings UI yet.
+---
+ .../telegram/messenger/CustomSettings.java    | 35 +++++++++++++++++++
+ .../java/org/telegram/ui/ChatActivity.java    |  6 ++--
+ 2 files changed, 39 insertions(+), 2 deletions(-)
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+index 356a2924..b3a35e8c 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/CustomSettings.java
+@@ -150,4 +150,39 @@ public class CustomSettings {
+         }
+         prefs().edit().putStringSet("hiddenGalleryBuckets", set).apply();
+     }
++
++    // Several photos/videos sent at once where 2+ carry different captions:
++    // an album bubble then shows none of them (MessageObject.GroupedMessages),
++    // so the attach sheet sends them ungrouped, as "Send without grouping"
++    // does. Key "autoUngroupCaptioned", default on, no UI yet.
++    public static boolean isAutoUngroupCaptioned() {
++        return prefs().getBoolean("autoUngroupCaptioned", true);
++    }
++
++    public static void setAutoUngroupCaptioned(boolean enabled) {
++        prefs().edit().putBoolean("autoUngroupCaptioned", enabled).apply();
++    }
++
++    // Same caption on every item (the "caption for all media" leftovers) and
++    // paid media (one priced album) keep the stock album.
++    public static boolean shouldUngroupCaptioned(Iterable<?> items) {
++        if (!isAutoUngroupCaptioned()) {
++            return false;
++        }
++        Set<String> captions = new HashSet<>();
++        for (Object o : items) {
++            if (!(o instanceof MediaController.PhotoEntry)) {
++                continue;
++            }
++            MediaController.PhotoEntry entry = (MediaController.PhotoEntry) o;
++            if (entry.starsAmount > 0) {
++                return false;
++            }
++            String caption = entry.caption != null ? entry.caption.toString().trim() : "";
++            if (!caption.isEmpty()) {
++                captions.add(caption);
++            }
++        }
++        return captions.size() >= 2;
++    }
+ }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index f982c7e9..849f209d 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -12587,6 +12587,8 @@ public class ChatActivity extends BaseFragment implements
+                         final HashMap<Object, Object> selectedPhotos = chatAttachAlert.getPhotoLayout().getSelectedPhotos();
+                         final ArrayList<Object> selectedPhotosOrder = chatAttachAlert.getPhotoLayout().getSelectedPhotosOrder();
+                         if (!selectedPhotos.isEmpty()) {
++                            // telegram-custom: 2+ different captions vanish in an album bubble, so send them apart
++                            final boolean customGroupMedia = arg && (button == 4 || forceDocument || editingMessageObject != null || !org.telegram.messenger.CustomSettings.shouldUngroupCaptioned(selectedPhotos.values()));
+                             final int albumsCount = (int) Math.ceil(selectedPhotos.size() / 10f);
+                             for (int i = 0; i < albumsCount; ++i) {
+                                 int count = Math.min(10, selectedPhotos.size() - (i * 10));
+@@ -12642,9 +12644,9 @@ public class ChatActivity extends BaseFragment implements
+                                 if (editingMessageObject != null && editingMessageObject.needResendWhenEdit()) {
+                                     MessageSuggestionParams params = messageSuggestionParams != null ?
+                                         messageSuggestionParams : MessageSuggestionParams.of(editingMessageObject.messageOwner.suggested_post);
+-                                    SendMessagesHelper.prepareSendingMedia(getAccountInstance(), photos, dialog_id, editingMessageObject, getThreadMessage(), null, replyingQuote, button == 4 || forceDocument, arg, null, notify, scheduleDate, scheduleRepeatPeriod, chatMode, updateStickersOrder, null, getMessageChatSendParams(), effectId, invertMedia, payStars, getSendMonoForumPeerId(), params);
++                                    SendMessagesHelper.prepareSendingMedia(getAccountInstance(), photos, dialog_id, editingMessageObject, getThreadMessage(), null, replyingQuote, button == 4 || forceDocument, customGroupMedia, null, notify, scheduleDate, scheduleRepeatPeriod, chatMode, updateStickersOrder, null, getMessageChatSendParams(), effectId, invertMedia, payStars, getSendMonoForumPeerId(), params);
+                                 } else {
+-                                    SendMessagesHelper.prepareSendingMedia(getAccountInstance(), photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, button == 4 || forceDocument, arg, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, chatMode, updateStickersOrder, null, getMessageChatSendParams(), effectId, invertMedia, payStars, getSendMonoForumPeerId(), messageSuggestionParams);
++                                    SendMessagesHelper.prepareSendingMedia(getAccountInstance(), photos, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, button == 4 || forceDocument, customGroupMedia, editingMessageObject, notify, scheduleDate, scheduleRepeatPeriod, chatMode, updateStickersOrder, null, getMessageChatSendParams(), effectId, invertMedia, payStars, getSendMonoForumPeerId(), messageSuggestionParams);
+                                 }
+                             }
+                             afterMessageSend();
+-- 
+2.55.0
+
