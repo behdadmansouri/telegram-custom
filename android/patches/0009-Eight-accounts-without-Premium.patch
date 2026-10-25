@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: telegram-custom <telegram-custom@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 00:02:38 -0400
+Subject: [PATCH] Eight accounts without Premium
+
+Stock Telegram allows 3 logged-in accounts, 4 with Premium. This raises
+the slot count to 8 for everyone:
+
+- UserConfig: MAX_ACCOUNT_COUNT 4 -> 8 and MAX_ACCOUNT_DEFAULT_COUNT
+  3 -> 8. The "Add account" gate (UserInfoActivity, MainTabsActivity,
+  LogoutActivity) subtracts MAX - DEFAULT free slots for non-Premium
+  users, which is now 0, so all 8 slots are free; the three call sites
+  are untouched. getMaxAccountCount() (display only, was 5/3) returns
+  the constant.
+- UserInfoActivity: the "Subscribe to Premium to use up to N accounts"
+  footer under the account list shows only while Premium still adds
+  slots, which it no longer does.
+- NotificationsController: the per-account summary notification id was
+  account + 1. For slots 4-7 that is 5-8, and 5 and 6 are the fixed ids
+  of the music player / import and live-location service notifications,
+  so slots 4-7 use 1000 + account instead. Slots 0-3 keep 1-4.
+- Native tgnet: Defines.h MAX_ACCOUNT_COUNT 5 -> 8 (sizes jniEnv[] and
+  the setJava() delegate loop) and ConnectionsManager::getInstance()
+  gets cases 5-7, with default now on 7. Without this, Java slots 5-7
+  would silently share native instance 4: one connection and one
+  tgnet.dat for several accounts.
+
+Existing slots 0-3 keep their indices, so their data (userconfing /
+userconfig1..3 prefs, account1..3 dirs, tgnet.dat) is unchanged. New
+slots get userconfig4..7 and files/account4..7 by the same string
+pattern. Every slot, logged in or not, gets its controllers and a
+native ConnectionsManager (one network thread) at app start, so the
+four extra slots cost some memory and startup time even when empty.
+---
+ TMessagesProj/jni/tgnet/ConnectionsManager.cpp        | 11 ++++++++++-
+ TMessagesProj/jni/tgnet/Defines.h                     |  2 +-
+ .../telegram/messenger/NotificationsController.java   |  3 ++-
+ .../main/java/org/telegram/messenger/UserConfig.java  |  6 +++---
+ .../main/java/org/telegram/ui/UserInfoActivity.java   |  2 +-
+ 5 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+index 32d590e8..4cf99856 100644
+--- a/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
++++ b/TMessagesProj/jni/tgnet/ConnectionsManager.cpp
+@@ -150,9 +150,18 @@ ConnectionsManager& ConnectionsManager::getInstance(int32_t instanceNum) {
+             static ConnectionsManager instance3(3);
+             return instance3;
+         case 4:
+-        default:
+             static ConnectionsManager instance4(4);
+             return instance4;
++        case 5:
++            static ConnectionsManager instance5(5);
++            return instance5;
++        case 6:
++            static ConnectionsManager instance6(6);
++            return instance6;
++        case 7:
++        default:
++            static ConnectionsManager instance7(7);
++            return instance7;
+     }
+ }
+ 
+diff --git a/TMessagesProj/jni/tgnet/Defines.h b/TMessagesProj/jni/tgnet/Defines.h
+index 80c1c2a0..9886ff2f 100644
+--- a/TMessagesProj/jni/tgnet/Defines.h
++++ b/TMessagesProj/jni/tgnet/Defines.h
+@@ -27,7 +27,7 @@
+ #define DOWNLOAD_CONNECTIONS_COUNT 2
+ #define UPLOAD_CONNECTIONS_COUNT 4
+ #define CONNECTION_BACKGROUND_KEEP_TIME 10000
+-#define MAX_ACCOUNT_COUNT 5
++#define MAX_ACCOUNT_COUNT 8
+ #define USE_DELEGATE_HOST_RESOLVE
+ 
+ #define USE_IPV4_ONLY 0
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+index d6901d26..674a9fd6 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+@@ -201,7 +201,8 @@ public class NotificationsController extends BaseController implements Notificat
+ 
+     public NotificationsController(int instance) {
+         super(instance);
+-        notificationId = currentAccount + 1;
++        // account+1 for slots 4+ would hit fixed service ids (5 music player/import, 6 live location)
++        notificationId = currentAccount < 4 ? currentAccount + 1 : 1000 + currentAccount;
+         notificationGroup = "messages" + (currentAccount == 0 ? "" : currentAccount);
+         SharedPreferences preferences = getAccountInstance().getNotificationsSettings();
+         inChatSoundEnabled = preferences.getBoolean("EnableInChatSound", true);
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java b/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
+index 0f79e448..28bd09ce 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/UserConfig.java
+@@ -24,8 +24,8 @@ import java.util.Arrays;
+ public class UserConfig extends BaseController {
+ 
+     public static int selectedAccount;
+-    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 3;
+-    public final static int MAX_ACCOUNT_COUNT = 4;
++    public final static int MAX_ACCOUNT_DEFAULT_COUNT = 8;
++    public final static int MAX_ACCOUNT_COUNT = 8;
+ 
+     private final Object sync = new Object();
+     private volatile boolean configLoaded;
+@@ -122,7 +122,7 @@ public class UserConfig extends BaseController {
+     }
+ 
+     public static int getMaxAccountCount() {
+-        return hasPremiumOnAccounts() ? 5 : 3;
++        return MAX_ACCOUNT_COUNT;
+     }
+ 
+     public int getNewMessageId() {
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
+index 42e770a6..9d8e6226 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/UserInfoActivity.java
+@@ -431,7 +431,7 @@ public class UserInfoActivity extends UniversalFragment implements NotificationC
+             for (int i = 0; i < accountNumbers.size(); ++i) {
+                 items.add(SettingsActivity.AccountCell.Factory.of(i, accountNumbers.get(i)));
+             }
+-            if (!UserConfig.hasPremiumOnAccounts()) {
++            if (UserConfig.MAX_ACCOUNT_DEFAULT_COUNT < UserConfig.MAX_ACCOUNT_COUNT && !UserConfig.hasPremiumOnAccounts()) {
+                 final int moreAccounts = Math.max(0, UserConfig.getMaxAccountCount() - UserConfig.getActivatedAccountsCount());
+                 items.add(UItem.asShadow(
+                     TextUtils.concat(
+-- 
+2.55.0
+
