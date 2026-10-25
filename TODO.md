@@ -1,7 +1,7 @@
 # TODO: Telegram Custom 📨
 
 ## ⚡ Next up
-- [ ] 🧍 **Give CI a bot for the channel posts** `S`: new bot + channel, two `gh secret set` commands, then Actions → announce to check: [USAGE.md](USAGE.md) → announcements
+- [ ] 🧍 **Fix the channel id: Telegram answers "chat not found"** `S`: the `TELEGRAM_*` secrets are set, but the post was refused; plain `@name` or the `-100…` id, bot an admin with Post messages, then Actions → announce re-posts 13.0.3: [USAGE.md](USAGE.md) → announcements
 - [ ] 🧍 **Delete the stale `TG_BOT_TOKEN` and `TG_CHANNEL` repo secrets** `S`: replaced by `TELEGRAM_*`; `TG_CHANNEL` held a placeholder
 - [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
 - [ ] 🧍 **Turn on the laptop's daily update** `S`: run `desktop/auto-update.sh --enable` once (my attempt was blocked as unapproved persistence)
