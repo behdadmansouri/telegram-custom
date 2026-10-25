@@ -24,18 +24,20 @@ Rules are pure (TrustRules) and unit-tested by CI with plain javac.
  .../messenger/DownloadController.java         |   5 +
  .../org/telegram/messenger/ImageLocation.java |   3 +
  .../org/telegram/messenger/ImageReceiver.java |   8 +
+ .../telegram/messenger/MediaController.java   |   7 +-
  .../telegram/messenger/MessagesStorage.java   |   2 +
+ .../messenger/NotificationsController.java    |   2 +-
  .../telegram/messenger/RichMessageLayout.java |   3 +
- .../telegram/messenger/TrustController.java   | 769 ++++++++++++++++++
+ .../telegram/messenger/TrustController.java   | 891 ++++++++++++++++++
  .../org/telegram/messenger/TrustRules.java    | 123 +++
  .../telegram/messenger/voip/VoIPService.java  |  10 +-
- .../telegram/ui/Cells/ChatMessageCell.java    |   5 +
+ .../telegram/ui/Cells/ChatMessageCell.java    |  12 +-
  .../org/telegram/ui/Cells/DialogCell.java     |   2 +-
- .../java/org/telegram/ui/ChatActivity.java    |   6 +
+ .../java/org/telegram/ui/ChatActivity.java    |   8 +-
  .../org/telegram/ui/SettingsActivity.java     |   4 +
  .../ui/Stories/StoriesController.java         |   3 +
  .../telegram/ui/TrustSettingsActivity.java    | 105 +++
- 14 files changed, 1043 insertions(+), 5 deletions(-)
+ 16 files changed, 1177 insertions(+), 11 deletions(-)
  create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
  create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java
  create mode 100644 TMessagesProj/src/main/java/org/telegram/ui/TrustSettingsActivity.java
@@ -99,15 +101,15 @@ index d32a2dc7..3fbf898b 100644
          if (webFile.noproxy) {
              imageLocation.path = webFile.url;
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java b/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
-index 0a607423..878a6a50 100644
+index 0a607423..14e4956f 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
 @@ -570,6 +570,14 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
      }
  
      public void setImage(ImageLocation mediaLocation, String mediaFilter, ImageLocation imageLocation, String imageFilter, ImageLocation thumbLocation, String thumbFilter, Drawable thumb, long size, String ext, Object parentObject, int cacheType) {
-+        if (parentObject instanceof MessageObject && TrustController.gateActive()) { // telegram-custom: media trust
-+            final ImageLocation[] trust = TrustController.filter(this, (MessageObject) parentObject, mediaLocation, imageLocation, thumbLocation);
++        if ((parentObject instanceof MessageObject || parentObject instanceof org.telegram.tgnet.tl.TL_stories.StoryItem) && TrustController.gateActive()) { // telegram-custom: media trust
++            final ImageLocation[] trust = TrustController.filter(this, parentObject, mediaLocation, imageLocation, thumbLocation);
 +            if (trust != null) {
 +                mediaLocation = trust[0];
 +                imageLocation = trust[1];
@@ -117,6 +119,44 @@ index 0a607423..878a6a50 100644
          if (allowLoadingOnAttachedOnly && !attachedToWindow) {
              if (setImageBackup == null) {
                  setImageBackup = new SetImageBackup();
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+index d95b2d13..56cf25bf 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java
+@@ -1972,7 +1972,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+                     ArrayList<MessageObject> arr = (ArrayList<MessageObject>) args[1];
+                     for (int a = 0; a < arr.size(); a++) {
+                         messageObject = arr.get(a);
+-                        if ((messageObject.isVoice() || messageObject.isRoundVideo()) && !messageObject.isVoiceOnce() && !messageObject.isRoundOnce() && (!voiceMessagesPlaylistUnread || messageObject.isContentUnread() && !messageObject.isOut())) {
++                        if ((messageObject.isVoice() || messageObject.isRoundVideo()) && !messageObject.isVoiceOnce() && !messageObject.isRoundOnce() && (!voiceMessagesPlaylistUnread || messageObject.isContentUnread() && !messageObject.isOut()) && TrustController.allowsMessage(messageObject)) { // telegram-custom: media trust
+                             voiceMessagesPlaylist.add(messageObject);
+                             voiceMessagesPlaylistMap.put(messageObject.getId(), messageObject);
+                         }
+@@ -3110,7 +3110,7 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         }
+         final File cacheFile = file != null ? file : FileLoader.getInstance(currentAccount).getPathToMessage(nextAudio.messageOwner);
+         boolean exist = cacheFile.exists();
+-        if (cacheFile != file && !cacheFile.exists()) {
++        if (cacheFile != file && !cacheFile.exists() && TrustController.allowsMessage(nextAudio)) { // telegram-custom: media trust
+             FileLoader.getInstance(currentAccount).loadFile(nextAudio.getDocument(), nextAudio, FileLoader.PRIORITY_LOW, nextAudio.shouldEncryptPhotoOrVideo() ? 2 : 0);
+         }
+     }
+@@ -3149,13 +3149,14 @@ public class MediaController implements AudioManager.OnAudioFocusChangeListener,
+         }
+         final File cacheFile = file != null ? file : FileLoader.getInstance(currentAccount).getPathToMessage(nextAudio.messageOwner);
+         boolean exist = cacheFile.exists();
+-        if (cacheFile != file && !cacheFile.exists() && nextAudio.isMusic()) {
++        if (cacheFile != file && !cacheFile.exists() && nextAudio.isMusic() && TrustController.allowsMessage(nextAudio)) { // telegram-custom: media trust
+             FileLoader.getInstance(currentAccount).loadFile(nextAudio.getDocument(), nextAudio, FileLoader.PRIORITY_LOW, nextAudio.shouldEncryptPhotoOrVideo() ? 2 : 0);
+         }
+     }
+ 
+     public void setVoiceMessagesPlaylist(ArrayList<MessageObject> playlist, boolean unread) {
+         voiceMessagesPlaylist = playlist != null ? new ArrayList<>(playlist) : null;
++        TrustController.trimPlaylist(voiceMessagesPlaylist); // telegram-custom: media trust
+         if (voiceMessagesPlaylist != null) {
+             voiceMessagesPlaylistUnread = unread;
+             voiceMessagesPlaylistMap = new SparseArray<>();
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
 index 98e066ea..8dcfd3f2 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
@@ -137,6 +177,19 @@ index 98e066ea..8dcfd3f2 100644
              SQLitePreparedStatement state_messages = null;
              SQLitePreparedStatement state_messages_topics = null;
              SQLitePreparedStatement state_media = null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+index ed00d1a7..8d1e19c2 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java
+@@ -5540,7 +5540,7 @@ public class NotificationsController extends BaseController implements Notificat
+                                     }
+                                 } else if (messageObject.getDocument() != null) {
+                                     String fileName = FileLoader.getAttachFileName(messageObject.getDocument());
+-                                    if (!pendingVoiceLoads.contains(fileName)) {
++                                    if (!pendingVoiceLoads.contains(fileName) && TrustController.allowsMessage(messageObject)) { // telegram-custom: media trust
+                                         pendingVoiceLoads.add(fileName);
+                                         getFileLoader().loadFile(messageObject.getDocument(), messageObject, FileLoader.PRIORITY_HIGH, 0);
+                                     }
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
 index ed4cc2b3..fdc41a47 100644
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
@@ -167,10 +220,10 @@ index ed4cc2b3..fdc41a47 100644
                      ? allowAutoplay() && DownloadController.getInstance(root.currentAccount).canDownloadMedia(DownloadController.AUTODOWNLOAD_TYPE_VIDEO, document.size)
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java b/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
 new file mode 100644
-index 00000000..7eef9f80
+index 00000000..10eca85b
 --- /dev/null
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
-@@ -0,0 +1,769 @@
+@@ -0,0 +1,891 @@
 +package org.telegram.messenger;
 +
 +import android.content.Context;
@@ -193,6 +246,7 @@ index 00000000..7eef9f80
 +import org.telegram.ui.ActionBar.ActionBarMenuItem;
 +import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
 +import org.telegram.ui.ActionBar.BaseFragment;
++import org.telegram.ui.Cells.ChatActionCell;
 +import org.telegram.ui.Cells.ChatMessageCell;
 +import org.telegram.ui.Cells.DialogCell;
 +import org.telegram.ui.ChatActivity;
@@ -443,6 +497,11 @@ index 00000000..7eef9f80
 +            }
 +        }
 +        final int why = compute(key, s);
++        // A marked user not loaded yet would be judged as a person (a bot
++        // mark never decays): do not cache that guess.
++        if (key > 0 && getMessagesController().getUser(key) == null && marks().containsKey(key)) {
++            return why;
++        }
 +        synchronized (verdicts) {
 +            verdicts.put(key, why);
 +        }
@@ -556,9 +615,10 @@ index 00000000..7eef9f80
 +        }
 +    }
 +
-+    // First tap on a waiting message in a chat cell: true when it newly
-+    // unlocks something you see (the cell then rebinds instead of running
-+    // the tap). Voice and music taps run as stock right away.
++    // First tap on a waiting message in a chat cell (didPressButton and
++    // didClickedImage): true when it newly unlocks something you see (the
++    // cell then rebinds instead of running the tap). Voice and music taps,
++    // and messages with no picture (locations, contacts, polls), run as stock.
 +    public static boolean noteTapped(MessageObject messageObject) {
 +        if (messageObject == null || messageObject.messageOwner == null || !gateActive()) {
 +            return false;
@@ -568,19 +628,56 @@ index 00000000..7eef9f80
 +            return false;
 +        }
 +        tc.addTapped(messageObject.getDialogId(), messageObject.getId());
-+        return !(messageObject.isVoice() || messageObject.isMusic());
++        if (messageObject.isVoice() || messageObject.isMusic()) {
++            return false;
++        }
++        final TLRPC.MessageMedia media = MessageObject.getMedia(messageObject.messageOwner);
++        return messageObject.getDocument() != null || MessageObject.isPhoto(messageObject.messageOwner)
++            || media instanceof TLRPC.TL_messageMediaWebPage || media instanceof TLRPC.TL_messageMediaStory;
++    }
++
++    // A message allowed now, for callers outside the cells (notifications,
++    // the voice playlist): taps included, no toast off the UI thread.
++    public static boolean allowsMessage(MessageObject messageObject) {
++        return messageObject == null || getInstance(messageObject.currentAccount).allows(messageObject);
++    }
++
++    // Voice playlist: drop waiting messages, so playback does not advance
++    // into (and preload) a stranger's next voice note.
++    public static void trimPlaylist(ArrayList<MessageObject> playlist) {
++        if (playlist == null || !gateActive()) {
++            return;
++        }
++        for (int a = playlist.size() - 1; a >= 1; a--) { // index 0 is the one you started
++            if (!allowsMessage(playlist.get(a))) {
++                playlist.remove(a);
++            }
++        }
 +    }
 +
 +    // ---- image gate G (ImageReceiver.setImage) ----
 +
 +    // Returns null to pass everything through (no allocation), otherwise the
 +    // new {media, image, thumb} locations.
-+    public static ImageLocation[] filter(ImageReceiver receiver, MessageObject messageObject, ImageLocation media, ImageLocation image, ImageLocation thumb) {
++    // parentObject is a MessageObject, or a StoryItem: a forwarded story's
++    // preview in a chat cell (StoriesUtilities.setImage), judged by the
++    // cell's message.
++    public static ImageLocation[] filter(ImageReceiver receiver, Object parentObject, ImageLocation media, ImageLocation image, ImageLocation thumb) {
 +        final View parent = receiver.getParentView();
-+        if (!(parent instanceof ChatMessageCell || parent instanceof DialogCell || parent instanceof BackupImageView && isChatBar(parent))) {
-+            return null; // viewers, shared media, anything you opened yourself
++        final MessageObject messageObject;
++        if (parentObject instanceof MessageObject) {
++            if (!(parent instanceof ChatMessageCell || parent instanceof DialogCell || parent instanceof BackupImageView && isChatBar(parent))) {
++                return null; // viewers, shared media, anything you opened yourself
++            }
++            messageObject = (MessageObject) parentObject;
++        } else if (parent instanceof ChatMessageCell) {
++            messageObject = ((ChatMessageCell) parent).getMessageObject();
++        } else if (parent instanceof ChatActionCell) {
++            messageObject = ((ChatActionCell) parent).getMessageObject(); // story mention
++        } else {
++            return null; // the story viewer and story lists
 +        }
-+        if (messageObject.messageOwner == null) {
++        if (messageObject == null || messageObject.messageOwner == null) {
 +            return null;
 +        }
 +        final TrustController tc = getInstance(messageObject.currentAccount);
@@ -636,7 +733,8 @@ index 00000000..7eef9f80
 +        } else if (location.photoSize instanceof TLRPC.TL_photoStrippedSize || location.photoSize instanceof TLRPC.TL_photoPathSize) {
 +            return true; // bytes inside the message
 +        } else if (location.path != null) {
-+            return !location.path.startsWith("http"); // a local file, not a direct URL
++            // a local file, not a direct URL, and not a cached video to autoplay
++            return !location.path.startsWith("http") && location.imageType != FileLoader.IMAGE_TYPE_ANIMATION;
 +        } else if (location.webFile != null) {
 +            return !location.webFile.noproxy; // fetched by Telegram (static maps)
 +        } else if (location.secureDocument != null) {
@@ -644,7 +742,7 @@ index 00000000..7eef9f80
 +        }
 +        // A cached photo shows; GIF, video and document locations stay off
 +        // even when cached, so nothing autoplays.
-+        return location.document == null && location.photoSize != null && messageObject.mediaExists && MessageObject.isPhoto(messageObject.messageOwner);
++        return location.document == null && location.photo != null && messageObject.mediaExists && MessageObject.isPhoto(messageObject.messageOwner);
 +    }
 +
 +    // ---- toast, menu, rebind ----
@@ -852,9 +950,11 @@ index 00000000..7eef9f80
 +                return;
 +            }
 +            final int today = today();
-+            if (!database.tableExists("tc_activity")) {
-+                database.executeFast(CREATE).stepThis().dispose();
-+                backfill(database, today);
++            database.executeFast(CREATE).stepThis().dispose();
++            database.executeFast(CREATE_META).stepThis().dispose();
++            if (!backfillRunning && backfillFrom(database) != BACKFILL_DONE) {
++                backfillRunning = true;
++                getMessagesStorage().getStorageQueue().postRunnable(this::backfillStep);
 +            }
 +            database.executeFast("DELETE FROM tc_activity WHERE day < " + (today - TrustRules.KEEP_DAYS)).stepThis().dispose();
 +            // Active days inside the window (today and the d - 1 days before).
@@ -893,23 +993,78 @@ index 00000000..7eef9f80
 +        }
 +    }
 +
-+    // Once per account database (the table is created here, and the
-+    // database goes away on logout): count what is still cached, with the
-+    // live feed's rules.
-+    private void backfill(SQLiteDatabase database, int today) {
++    // Backfill progress lives in its own row (tc_meta 'backfill'): the last
++    // messages_v2 rowid done, or BACKFILL_DONE. Not the table's existence: the
++    // live feed may create tc_activity first. The account database goes away
++    // on logout, so a new login backfills again.
++    private static final String CREATE_META = "CREATE TABLE IF NOT EXISTS tc_meta(k TEXT PRIMARY KEY, v INTEGER)";
++    private static final long BACKFILL_DONE = -1;
++    private static final int BACKFILL_CHUNK = 2000;
++    private boolean backfillRunning; // storage queue only
++    private LongSparseArray<SparseBooleanArray> backfillSeen; // storage queue only
++
++    private static long backfillFrom(SQLiteDatabase database) throws Exception {
++        SQLiteCursor cursor = null;
++        try {
++            cursor = database.queryFinalized("SELECT v FROM tc_meta WHERE k = 'backfill'");
++            return cursor.next() ? cursor.longValue(0) : 0;
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++    }
++
++    // Count what is still cached, with the live feed's rules: one chunk of
++    // messages_v2 rows per storage-queue turn, in one transaction, with an
++    // in-memory (uid, day) dedupe, so chat loads and sends interleave.
++    private void backfillStep() {
 +        SQLiteCursor cursor = null;
 +        SQLitePreparedStatement state = null;
++        SQLiteDatabase database = null;
++        boolean transaction = false;
++        boolean more = false;
++        boolean failed = false;
 +        try {
++            database = getMessagesStorage().getDatabase();
++            if (database == null) {
++                backfillRunning = false;
++                return;
++            }
++            final long from = backfillFrom(database);
++            if (from == BACKFILL_DONE) {
++                backfillRunning = false;
++                return;
++            }
++            if (backfillSeen == null) {
++                backfillSeen = new LongSparseArray<>();
++            }
 +            final long selfId = getUserConfig().getClientUserId();
++            final int today = today();
 +            final long since = System.currentTimeMillis() / 1000 - TrustRules.KEEP_DAYS * 86400L;
++            database.beginTransaction();
++            transaction = true;
 +            state = database.executeFast("INSERT OR IGNORE INTO tc_activity VALUES(?, ?)");
-+            cursor = database.queryFinalized("SELECT uid, date, data FROM messages_v2 WHERE uid > 0 AND out = 0 AND date >= " + since);
++            cursor = database.queryFinalized("SELECT rowid, uid, date, out, data FROM messages_v2 WHERE rowid > " + from + " ORDER BY rowid LIMIT " + BACKFILL_CHUNK);
++            long last = from;
++            int rows = 0;
 +            while (cursor.next()) {
-+                final long uid = cursor.longValue(0);
-+                if (!DialogObject.isUserDialog(uid) || uid == selfId) {
++                rows++;
++                last = cursor.longValue(0);
++                final long uid = cursor.longValue(1);
++                final int date = cursor.intValue(2);
++                if (cursor.intValue(3) != 0 || date < since || !DialogObject.isUserDialog(uid) || uid == selfId) {
 +                    continue;
 +                }
-+                final NativeByteBuffer data = cursor.byteBufferValue(2);
++                final int day = TrustRules.day(date, offset(date));
++                if (day < today - TrustRules.KEEP_DAYS || day > today + 1) {
++                    continue;
++                }
++                SparseBooleanArray days = backfillSeen.get(uid);
++                if (days != null && days.get(day)) {
++                    continue;
++                }
++                final NativeByteBuffer data = cursor.byteBufferValue(4);
 +                if (data == null) {
 +                    continue;
 +                }
@@ -918,24 +1073,44 @@ index 00000000..7eef9f80
 +                if (message == null || message.action != null || message.out) {
 +                    continue;
 +                }
-+                final int date = cursor.intValue(1);
-+                final int day = TrustRules.day(date, offset(date));
-+                if (day < today - TrustRules.KEEP_DAYS || day > today + 1) {
-+                    continue;
-+                }
 +                state.requery();
 +                state.bindLong(1, uid);
 +                state.bindInteger(2, day);
 +                state.step();
++                if (days == null) {
++                    backfillSeen.put(uid, days = new SparseBooleanArray());
++                }
++                days.put(day, true);
 +            }
++            cursor.dispose();
++            cursor = null;
++            more = rows == BACKFILL_CHUNK;
++            final SQLitePreparedStatement meta = database.executeFast("REPLACE INTO tc_meta VALUES('backfill', ?)");
++            meta.requery();
++            meta.bindLong(1, more ? last : BACKFILL_DONE);
++            meta.step();
++            meta.dispose();
 +        } catch (Exception e) {
 +            FileLog.e(e);
++            failed = true; // retried by the next 6-hourly refresh, not in a loop
 +        } finally {
 +            if (cursor != null) {
 +                cursor.dispose();
 +            }
 +            if (state != null) {
 +                state.dispose();
++            }
++            if (transaction) {
++                database.commitTransaction();
++            }
++        }
++        if (more && !failed) {
++            getMessagesStorage().getStorageQueue().postRunnable(this::backfillStep);
++        } else {
++            backfillRunning = false;
++            backfillSeen = null;
++            if (!failed) {
++                queueRefresh(0);
 +            }
 +        }
 +    }
@@ -1112,10 +1287,31 @@ index a01edcfb..a9680b03 100755
  				req1.protocol.max_layer = Instance.getConnectionMaxLayer();
  				Collections.addAll(req1.protocol.library_versions, NativeInstance.getAllVersions());
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-index 6b45401b..f512f63a 100644
+index 6b45401b..ecfa911d 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
-@@ -17852,6 +17852,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+@@ -4339,7 +4339,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+                 if (currentMessageObject.isSendError()) {
+                     imagePressed = false;
+                     result = false;
+-                } else if (currentMessageObject.type == MessageObject.TYPE_GIF && buttonState == -1 && SharedConfig.isAutoplayGifs() && !currentMessageObject.isRepostPreview && photoImage.getAnimation() == null) {
++                } else if (currentMessageObject.type == MessageObject.TYPE_GIF && buttonState == -1 && SharedConfig.isAutoplayGifs() && !currentMessageObject.isRepostPreview && photoImage.getAnimation() == null && org.telegram.messenger.TrustController.allowsMessage(currentMessageObject)) { // telegram-custom: media trust
+                     imagePressed = false;
+                     result = false;
+                 }
+@@ -6007,6 +6007,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+     }
+ 
+     private void didClickedImage() {
++        if (org.telegram.messenger.TrustController.noteTapped(currentMessageObject)) { // telegram-custom: media trust: first tap loads it
++            currentMessageObject.forceUpdate = true;
++            setMessageObject(currentMessageObject, currentMessagesGroup, pinnedBottom, pinnedTop, firstInChat, lastInChatList);
++            return;
++        }
+         if (currentMessageObject.hasMediaSpoilers() && !currentMessageObject.needDrawBluredPreview() && !currentMessageObject.isMediaSpoilersRevealed) {
+             if (delegate != null && currentMessageObject.isSensitive()) {
+                 delegate.didPressRevealSensitiveContent(this);
+@@ -17852,6 +17857,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      }
  
      private void didPressButton(boolean animated, boolean video) {
@@ -1141,7 +1337,7 @@ index 0fae7fdd..2abf7426 100644
          }
  
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
-index 7ea10cdc..cdd8b302 100644
+index 7ea10cdc..07c683dc 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
 @@ -3936,6 +3936,8 @@ public class ChatActivity extends BaseFragment implements
@@ -1171,6 +1367,15 @@ index 7ea10cdc..cdd8b302 100644
              if (currentUser != null && currentUser.self && getDialogId() != UserObject.VERIFY) {
                  headerItem.lazilyAddSubItem(add_shortcut, R.drawable.msg_home, LocaleController.getString(R.string.AddShortcut));
              }
+@@ -16197,7 +16203,7 @@ public class ChatActivity extends BaseFragment implements
+                 }
+                 getDownloadController().checkUnviewedDownloads(messageCell.getId(), dialog_id);
+                 boolean allowPlayEffect = messageObject.getEffect() != null || ((messageObject.messageOwner.media != null && !messageObject.messageOwner.media.nopremium) || (messageObject.isAnimatedEmojiStickerSingle() && dialog_id > 0));
+-                if ((chatListItemAnimator == null || !chatListItemAnimator.isRunning()) && (!messageObject.isOutOwner() || messageObject.forcePlayEffect) && allowPlayEffect && !messageObject.messageOwner.premiumEffectWasPlayed && (messageObject.isPremiumSticker() || messageCell.getEffect() != null || messageObject.isAnimatedEmojiStickerSingle()) && !walletReceiveAnimationPlaying && emojiAnimationsOverlay.isIdle() && emojiAnimationsOverlay.checkPosition(messageCell, chatListViewPaddingTop, chatListView.getMeasuredHeight() - blurredViewBottomOffset)) {
++                if ((chatListItemAnimator == null || !chatListItemAnimator.isRunning()) && (!messageObject.isOutOwner() || messageObject.forcePlayEffect) && allowPlayEffect && org.telegram.messenger.TrustController.allowsMessage(messageObject) /* telegram-custom: media trust */ && !messageObject.messageOwner.premiumEffectWasPlayed && (messageObject.isPremiumSticker() || messageCell.getEffect() != null || messageObject.isAnimatedEmojiStickerSingle()) && !walletReceiveAnimationPlaying && emojiAnimationsOverlay.isIdle() && emojiAnimationsOverlay.checkPosition(messageCell, chatListViewPaddingTop, chatListView.getMeasuredHeight() - blurredViewBottomOffset)) {
+                     emojiAnimationsOverlay.onTapItem(messageCell, ChatActivity.this, false);
+                 } else if (messageObject.isAnimatedAnimatedEmoji()) {
+                     emojiAnimationsOverlay.preloadAnimation(messageCell);
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
 index e48312c6..0c978330 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java

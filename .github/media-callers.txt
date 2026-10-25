@@ -22,6 +22,9 @@ android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/messeng
 android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	2
 android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java	1
 android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java	1
+android	getForVideoPath(	TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java	1
+android	getForVideoPath(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	3
+android	getForVideoPath(	TMessagesProj/src/main/java/org/telegram/ui/iv/RichMediaItem.java	1
 android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java	1
 android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	1
 android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java	1
@@ -43,6 +46,15 @@ android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/Collec
 android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/GramWalletTonConnect.java	5
 android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/TransactionCell.java	1
 android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletTonConnectSessionsFragment.java	2
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java	7
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java	1
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Cells/AudioPlayerCell.java	3
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	19
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Cells/ContextLinkCell.java	2
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedAudioCell.java	3
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Cells/ThemesHorizontalListCell.java	2
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/SelectAudioAlert.java	1
+android	loadFile(@TMessagesProj/src/main/java/org/telegram/messenger/NotificationsController.java:TMessagesProj/src/main/java/org/telegram/messenger/MediaController.java:TMessagesProj/src/main/java/org/telegram/ui/Cells:TMessagesProj/src/main/java/org/telegram/ui/Stories	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java	5
 android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/ChatThemeController.java	1
 android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java	2
 android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java	1
@@ -157,7 +169,13 @@ android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/S
 android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/SuggestUserPhotoView.java	2
 android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/TextureViewContainer.java	1
 android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java	1
+android	new Instance.Config(	TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java	1
+android	p2p_allowed	TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java	1
+android	p2p_allowed	TMessagesProj/src/main/java/org/telegram/tgnet/tl/TL_phone.java	5
 android	preloadStory(	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java	6
+android	StoriesUtilities.setImage(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java	1
+android	StoriesUtilities.setImage(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	1
+android	StoriesUtilities.setImage(	TMessagesProj/src/main/java/org/telegram/ui/Stories/SelfStoriesPreviewView.java	2
 android	udp_p2p	TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java	3
 android	udp_p2p	TMessagesProj/src/main/java/org/telegram/tgnet/tl/TL_phone.java	5
 desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/history/admin_log/history_admin_log_inner.cpp	1

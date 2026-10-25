@@ -30,22 +30,32 @@ desktop)
         'setContentUrl(' 'webFileLoader')
     paths=(Telegram/SourceFiles) ;;
 android)
+    J=TMessagesProj/src/main/java/org/telegram
     patterns=('canDownloadMedia(' 'canDownloadMediaType(' 'canPreloadStories('
         'getCurrentDownloadMask(' 'computeAutoDownload(' 'getForWebFile('
-        'preloadStory(' 'udp_p2p' 'new ImageReceiver(')
+        'preloadStory(' 'udp_p2p' 'new ImageReceiver(' 'getForVideoPath('
+        'StoriesUtilities.setImage(' 'p2p_allowed' 'new Instance.Config('
+        "loadFile(@$J/messenger/NotificationsController.java:$J/messenger/MediaController.java:$J/ui/Cells:$J/ui/Stories")
     paths=(TMessagesProj/src/main/java) ;;
 *)
     echo "unknown platform: $platform" >&2
     exit 2 ;;
 esac
 
-# "file:count" per file that contains the pattern.
+# "file:count" per file that contains the pattern. A pattern written as
+# "text@dir1:dir2" is counted only under those paths (for a call too common
+# to guard tree-wide).
 count() {
+    local pat=$1 where=("${paths[@]}")
+    if [[ $pat == *@* ]]; then
+        IFS=: read -ra where <<<"${pat#*@}"
+        pat=${pat%%@*}
+    fi
     if [[ -n $rev ]]; then
-        git -C "$tree" grep -c -F -e "$1" "$rev" -- "${paths[@]}" \
+        git -C "$tree" grep -c -F -e "$pat" "$rev" -- "${where[@]}" \
             | sed "s|^$rev:||" || true
     else
-        (cd "$tree" && grep -rcF -e "$1" "${paths[@]}" | grep -v ':0$') || true
+        (cd "$tree" && grep -rcF -e "$pat" "${where[@]}" | grep -v ':0$') || true
     fi
 }
 
