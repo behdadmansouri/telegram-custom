@@ -4,7 +4,7 @@ Plan item: [plan.md](plan.md) → batch 2 step 5. Revised after [critique 1](arc
 
 ## 0. 🧱 v1 build list (go straight down it)
 
-One branch, one patch per platform (`0007-Media-trust` Android, `0007-Media-trust` desktop). Each step compiles on its own.
+One branch, one patch per platform (`0010-Media-trust` Android, `0009-Media-trust` desktop; numbers after the batch-2 patches, before `Whats-custom`). Each step compiles on its own.
 
 **Android (13.0.3)**
 
