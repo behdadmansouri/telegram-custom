@@ -1,236 +1,256 @@
 # Trust model: design
 
-Plan item: [plan.md](plan.md) → batch 2 step 5. Pins read: Android DrKLO `9552e554` (12.10.3), desktop tdesktop `v7.2.5`. Paths are relative to `TMessagesProj/src/main/java/org/telegram/` (Android) and `Telegram/SourceFiles/` (desktop). ✓ = verified in source at the pin; ~ = inferred (reasoned from nearby code, not traced end to end).
+Plan item: [plan.md](plan.md) → batch 2 step 5. Revised after [critique 1](archive/2026-10-25-trust-critique-1.md). Pins read: Android DrKLO `0aae9598` (13.0.3), desktop tdesktop `v7.2.5`. Paths are relative to `TMessagesProj/src/main/java/org/telegram/` (Android) and `Telegram/SourceFiles/` (desktop). ✓ = verified in source at the pin; ~ = inferred (reasoned from nearby code, not traced end to end). "Cn" points at critique objection n.
+
+## 0. 🧱 v1 build list (go straight down it)
+
+One branch, one patch per platform (`0007-Media-trust` Android, `0007-Media-trust` desktop). Each step compiles on its own.
+
+**Android (13.0.3)**
+
+| # | Piece | Anchor | Lines |
+|---|---|---|---|
+| A1 | `messenger/TrustController.java` (new): rules of section 1, prefs, in-memory sets, tapped set, toast | new file | 220 |
+| A2 | Activity table `tc_activity`: create, feed, prune, one-time backfill (inside A1, two feed calls in storage) | `MessagesStorage.java:11863` (`putMessagesInternal`), `:16079` (`putMessages(messages_Messages, ...)`, history pages) ✓ | 2 |
+| A3 | Auto-download gate, top of the 4 funnels | `DownloadController.java:688`, `:778` (`canDownloadMediaInternal` ×2), `:861`, `:942` (`TLRPC.Message` ×2) ✓ | 4 |
+| A4 | Forwarded-story bypass in the `MessageObject` entry (its story branch returns before the funnel) | `DownloadController.java:609-617` ✓ | 1 |
+| A5 | Peerless callers: wrap with the message's trust | `ui/Cells/DialogCell.java:5801` ✓ (`currentDialogId`); `messenger/RichMessageLayout.java:6687`, `:7214`, `:8144` ✓ (`root.messageObject`) | 4 |
+| A6 | Image gate G (thumbnails, replies, link-preview images, games, cached GIF/video autoplay, animated/video stickers) | `messenger/ImageReceiver.java:572` (top of the 11-arg `setImage`) ✓ | 6 |
+| A7 | Direct-URL web documents off | `messenger/ImageLocation.java:89` ✓ | 1 |
+| A8 | Story preload | `ui/Stories/StoriesController.java:580` ✓ | 1 |
+| A9 | Calls relay-only | `messenger/voip/VoIPService.java:3423`, `:1111`, `:1880`, `:4360` ✓ | 4 |
+| A10 | Chat ⋮ menu item (state-first label) | `ui/ChatActivity.java:1656` (id beside `add_shortcut = 24`), `:4445-4486` (`lazilyAddSubItem` block), `:3939` (`id == add_shortcut` handler) ✓ | 20 |
+| A11 | Settings row + one compact screen | `ui/SettingsActivity.java:708` (after Ghost mode's row 100, use id 101), `:845` switch ✓; new `ui/TrustSettingsActivity.java` | 100 |
+| | **Android total** | | **~365, ~45 inside upstream files** |
+
+**Desktop (7.2.5)**
+
+| # | Piece | Anchor | Lines |
+|---|---|---|---|
+| D1 | `custom/custom_trust.{h,cpp}` (new): rules, per-account file, activity log, toast, repaint | new files + `Telegram/CMakeLists.txt` (as patch 0003) | 230 |
+| D2 | Activity feed | `history/history.cpp:576` (`History::createItem`), beside the `topPeers` line `:595-596` ✓ | 3 |
+| D3 | Auto-download + autoplay gates | `data/data_auto_download.cpp:367` (before `sticker()` at `:371`), `:406`, `:426`, `:449` ✓ | 8 |
+| D4 | Network thumbnails (photos, replies, link previews, documents) | `data/data_photo_media.cpp:153`; `data/data_document.cpp:870` (`loadThumbnail`); `history/view/media/history_view_web_page.cpp:944` ✓ | 10 |
+| D5 | Animated/video stickers static | `history/view/media/history_view_sticker.cpp:190-195` (`readyToDrawAnimationFrame`) ✓ | 3 |
+| D6 | Direct-URL web documents off | `ui/image/image_location_factory.cpp:320-331` (`FromWebDocument`, `MTPDwebDocumentNoProxy` branch) ✓ | 2 |
+| D7 | Story preload | `data/data_stories.cpp:2611-2613` (`startPreloading`, after the `Expects`) ✓ | 4 |
+| D8 | Calls relay-only | `calls/calls_call.cpp:1090`, `:356`, `:490`, `:974` ✓ | 6 |
+| D9 | Chat ⋮ menu item | `window/window_peer_menu.cpp:1922` (`fillHistoryActions`) + new `Filler::addToggleTrust` ✓ | 25 |
+| D10 | Settings button + one compact box | `settings/sections/settings_advanced.cpp:217` (`BuildAutoDownloadSection`) ✓ | 75 |
+| | **Desktop total** | | **~365, ~65 inside upstream files** |
+
+**CI (both)**
+
+| # | Piece | Where | Lines |
+|---|---|---|---|
+| C1 | Caller-count guard (section 4.1) | `.github/media-callers.sh` + `.github/media-callers.txt`, a step in `android.yml` and `desktop.yml` before patches apply | 30 + table |
+| C2 | Rule-table unit tests (pure `decide()` on both platforms) | JVM test in the Android build, a small C++ test target or a `static_assert`-free test binary on desktop (~) | 80 |
 
 ## 1. 📐 rules (spec)
 
-**Unit of trust is the chat (dialog), with one per-message widening.** A message is trusted when its chat is trusted, or (group chats only) when its sender is a trusted person. That mirrors stock, which already classes "media from a contact inside a group" as contact media (`DownloadController.java:711-727` ✓).
+**Unit of trust is the chat (dialog).** Inputs, per account: the dialog kind (user, bot, basic group, supergroup, channel, secret chat); creator/admin flags; the contact list; the manual marks; per-person active days. An **active day** is a local calendar day on which that person sent you at least one non-service message in your private chat, as logged by this device (section 2.2 / 3.2).
 
-**Inputs, per account:** the account's own user id; the dialog's kind (user, bot, basic group, supergroup, channel, secret chat); admin/creator flags of the chat; the contact list; the manual lists below; a per-person set of "active days" (local calendar days on which that person sent at least one message in the private chat with you, within the window).
-
-**Rules, evaluated top to bottom, first match wins:**
+**Rules, top to bottom, first match wins:**
 
 | # | Rule | Result |
 |---|---|---|
-| 0 | Master switch off | trusted (stock behaviour everywhere) |
-| 1 | Chat is on the "never trust" list | untrusted |
-| 2 | Saved Messages (self), or Telegram service account 777000 | trusted |
-| 3 | Group, channel or bot on the "trusted" list | trusted (never decays) |
-| 4 | Group or channel you created or admin (setting, default on) | trusted |
-| 5 | Person on the "trusted" list, marked less than `grace` days ago | trusted |
-| 6 | Person on the "trusted" list with at least `N` active days in the last `D` days | trusted |
-| 7 | Contact with at least `N` active days in the last `D` days (setting, default on) | trusted |
-| 8 | Group message whose sender is trusted by rules 2, 5, 6 or 7 (setting, default on) | trusted, this message only |
+| 0 | Trust model off | trusted (stock everywhere) |
+| 1 | Chat marked "never trust" | untrusted |
+| 2 | Saved Messages, or the Telegram service account 777000 | trusted |
+| 3 | Group, channel or bot marked trusted by hand | trusted, no decay |
+| 4 | Group you created, or channel (broadcast) where you are creator or admin; setting, default on | trusted |
+| 5 | Person marked trusted less than `grace` days ago | trusted |
+| 6 | Person marked trusted with ≥ `N` active days in the last `D` | trusted |
+| 7 | Contact with ≥ `N` active days in the last `D`; setting, default on | trusted |
+| 8 | Group message whose sender is trusted by 2, 5, 6 or 7; setting, **default off** (C5) | trusted, that message only |
 | 9 | Anything else | untrusted |
 
-**Decay of a hand-trusted person (rules 5-6):** the mark is never deleted by decay. It is dormant while the person is below the threshold, and comes back by itself when they are active again. Why not clear it: clearing is a silent, irreversible edit to a user decision; dormancy gives the user's "it drops" behaviour without losing the mark. The trust screen lists dormant marks so the user sees why someone dropped.
+Rule 4 is deliberately narrower than "chats you admin": a supergroup where someone else made you admin is untrusted unless marked, because big public groups you moderate are full of strangers (default, user to confirm: question 4). Android: `chat.creator || ChatObject.isChannelAndNotMegaGroup(chat) && ChatObject.hasAdminRights(chat)` (`messenger/ChatObject.java:2127`, `:2085`, `:2123` ✓). Desktop: `amCreator() || isBroadcast() && hasAdminRights()` (`data/data_channel.h:358`, `:385`; `data/data_chat.h:67`, `:88` ✓).
 
-**Secret chats:** take the trust of the peer user (rules 1, 5-7 by user id). **Bots:** only by hand (rule 3); a bot never passes the activity rule (its "messages" are automated). **Non-contact people:** only by hand (rules 5-6), since rule 7 needs a contact.
+**Decay of a hand-trusted person (5-6):** the mark is never deleted; it goes dormant below the threshold and revives when the person is active again. The chat menu label shows "dormant" (no list screen in v1, C8). **Secret chats** take the peer user's trust. **Bots** only by hand (3). **Non-contacts** only by hand (5-6).
 
-**Settings and defaults (all adjustable):**
+**Settings (all adjustable; global, one set for all accounts):** trust model on (default on); `N` = 3 (1-30); `D` = 90 (7-365); `grace` = 90 (0-365); rule 4 on; rule 7 on; rule 8 off; "untrusted chats: tap to load" on; "untrusted calls: relay only" on. The five per-surface toggles of the draft collapse into "tap to load" (C8: nobody wants link images blocked but GIF autoplay allowed).
 
-| Setting | Default | Range |
-|---|---|---|
-| Trust model on | on | on/off |
-| `N` active days | 3 | 1-30 |
-| `D` window, days | 90 | 7-365 |
-| `grace` for a fresh hand mark, days | = `D` | 0-365 |
-| Admin/creator chats trusted | on | on/off |
-| Active contacts trusted | on | on/off |
-| Trusted sender widens a group message | on | on/off |
-| Untrusted: block auto-download | on | on/off |
-| Untrusted: block autoplay | on | on/off |
-| Untrusted: block story preload | on | on/off |
-| Untrusted: block link-preview images | on | on/off |
-| Untrusted: calls relay-only (no P2P) | on | on/off |
-| Untrusted: static stickers/custom emoji | off | on/off (separate optional item, section 2.9 / 3.8) |
+**What untrusted means (tap to load on):**
+- No media downloads without a tap: photos, videos, GIFs, round videos, voice, files.
+- Only the **embedded** thumbnail shows (Telegram's tiny blurred "stripped" size, bytes inside the message): no network thumbnail for photos, videos, GIFs, files, link previews, game previews, or the quoted image in a reply (C1, C14b).
+- Nothing autoplays, including GIFs and videos already on disk from another chat.
+- Animated (TGS) and video (webm) stickers show their static thumbnail; static stickers show as normal. Tapping a sticker opens its pack as in stock, which plays it.
+- Stories of that peer are not preloaded.
+- Direct-URL web documents (`webDocumentNoProxy`, fetched from your own IP, not through Telegram) never load, in any chat, while the trust model is on (C4).
+- 1:1 calls use Telegram's relay only.
+- A tap always loads that one item, for the rest of the session.
 
-**What untrusted means:** no media download without a tap (only the thumbnail embedded in the message, Telegram's tiny blurred "stripped" one, shows); no GIF/video/round-video autoplay; stories of that peer are not preloaded; link-preview images wait for a tap; 1:1 calls use Telegram's relay (P2P off: a direct call reveals the IP). A tap always loads: the gate only stops what happens on its own. **What trusted means:** exactly stock, under the user's normal auto-download, power-saving and P2P-privacy settings. Trust never forces a download stock would not do.
+**Not covered, said plainly:** custom emoji still animate (no chat context in their renderer, section 2.7); avatars and profile photos load everywhere (every client does); media opened in the photo viewer, story viewer or instant view loads (you opened it), and the story viewer's auto-advance to the next peer counts as opened; service-message photos (chat photo changed) load (`ChatActionCell`, ~).
 
-**Scope:** the manual lists and the activity data are per account (dialog ids are per account; contacts and admin rights are per account). The rule settings (numbers, toggles) are global, one set for all accounts, like Ghost mode. "Active day" uses the device's local time zone.
+**Trusted means stock:** the user's normal auto-download, power-saving and P2P-privacy settings apply. Trust never forces a download stock would not do.
+
+**Scope: per device, per account (C12).** Marks and the activity log live on each device and are never synced: syncing would mean new traffic through Telegram (cloud storage, a bot), which this repo does not add. Expect to mark a chat on the phone and again on the laptop, and expect the activity rule to disagree between devices for a while (each device counts only the messages it has seen). Settings are per device too.
 
 ## 2. 🤖 Android design
 
-### 2.1 Where trust is computed
-New `messenger/TrustController.java`, one instance per account (`getInstance(account)`, same pattern as `DownloadController`). Public surface: `isTrusted(long dialogId)`, `isTrusted(MessageObject)` / `isTrusted(TLRPC.Message)` (applies rule 8 with `from_id`), `setManual(long dialogId, int state)` (none / trusted / never), `refresh()`. `isTrusted` is called on the UI thread from cell binding, so it must be O(1): it reads in-memory sets only (manual lists, active-user set) plus `MessagesController.getChat()` (a concurrent map). The expensive part (active days) is computed off-thread into a `volatile Set<Long> activeUsers`.
+### 2.1 TrustController (A1)
+One instance per account (`getInstance(account)`, the `DownloadController` pattern). Surface: `allows(MessageObject)`, `allows(TLRPC.Message)`, `isTrusted(long dialogId)`, `setMark(long dialogId, int state)` (none / trusted / never), `noteTapped(MessageObject)`, `refresh()`, and a pure static `decide(...)` taking plain values (kind, flags, mark, markedAt, activeDays, now, settings) for the unit test (C2). Called on the UI thread from cell binding, so reads are O(1) on immutable snapshots: the marks map and the active-user set are replaced whole (`volatile` reference to an unmodifiable copy) by `refresh()` on the storage queue (C14c). `MessagesController.getChat` reads a `ConcurrentHashMap` (`messenger/MessagesController.java:147` ✓), `ContactsController.contactsDict` too (`messenger/ContactsController.java:238` ✓).
 
-### 2.2 Counting "messaged on N separate days in D days"
-Local data: `messages_v2(mid, uid, read_state, send_state, date, data, out, ...)` with index `uid_date_mid_idx_messages_v2 ON messages_v2(uid, date, mid)` (`MessagesStorage.java:551-553` ✓). For a private chat `uid` is the user id; `out` is 0 for incoming; `date` is server unix time.
+### 2.2 Activity log (A2): count arrivals, not retained rows (C6)
+Own table in the account's cache database, created on first use: `CREATE TABLE IF NOT EXISTS tc_activity(uid INTEGER, day INTEGER, PRIMARY KEY(uid, day))`.
 
-Query, run on `MessagesStorage.getStorageQueue()`, once per candidate (contacts plus hand-marked people, typically a few hundred):
+**Feed:** `TrustController.noteIncoming(messages, mode)` at the top of `putMessagesInternal` (`messenger/MessagesStorage.java:11863` ✓, realtime updates) and of `putMessages(TLRPC.messages_Messages, ...)` (`:16079` ✓, history pages; the draft and C6 both called `putMessagesInternal` the single point, it is not: history pages insert into `messages_v2` from their own function, `:16244` ✓). Both run on the storage queue (~ for `:16079`, which posts itself there). Per message: skip unless `!out`, `action == null` (service messages, incoming calls included, do not count: C14a), `peer_id.user_id != 0`, not self, `mode == 0` (not scheduled). `INSERT OR IGNORE (uid, (date + tzOffset(date)) / 86400)`. One prepared statement per batch.
 
-```sql
-SELECT COUNT(DISTINCT (date + ?tzOffset) / 86400)
-FROM messages_v2
-WHERE uid = ?userId AND out = 0 AND date >= ?now - ?D*86400
-```
+**Read:** `SELECT uid FROM tc_activity WHERE day >= ?today-D GROUP BY uid HAVING COUNT(*) >= ?N` into the active set. The table holds at most people × 365 rows; the query is trivial. **Prune:** `DELETE FROM tc_activity WHERE day < ?today-365` on refresh. **Refresh:** account start (after contacts load), every 6 h, and on a setting or mark change.
 
-Each is an index range scan on `(uid, date)`: sub-millisecond for a normal chat (~). A few hundred candidates is a few hundred ms on the storage thread at most, once per refresh. Not a single `GROUP BY uid` over the whole table: there is no index on `date` alone, so that would scan every cached message.
+**Backfill, once per account** (flag in prefs): `INSERT OR IGNORE INTO tc_activity SELECT uid, (date + ?tz) / 86400 FROM messages_v2 WHERE uid > 0 AND out = 0 AND date >= ?now-365d` (`messages_v2` schema `:551` ✓; one full scan, on the storage queue, once). Limits: it counts what is still cached, uses one fixed time-zone offset, and cannot tell service rows apart (no `action` column, the message is in the `data` blob), so it may count a few incoming-call days once. Desktop has no equivalent; Android simply starts better.
 
-**Refresh cadence:** on account start after contacts load, then every 6 h, and immediately after the user changes a rule or a manual mark. Staleness of a few hours is fine: a person crossing the threshold today gets trusted by the next refresh. Optional incremental update (cheap, ~10 lines): when an incoming private message lands on a day not yet counted, add it in memory.
+**Survives:** "Clear local database" (`clearLocalDatabase`, `:1416` ✓, deletes a fixed list of stock tables, ~ for not touching ours) and auto-delete timers (rows are logged on arrival). **Lost:** on logout (the database is deleted), as intended.
 
-**When history is not cached locally:** stock caches every message it receives through updates and every history page it loads (`putMessagesInternal`, `MessagesStorage.java:11862` ✓), so on a phone that stays logged in the table is close to complete. Gaps: a fresh install or re-login (empty table), and Settings → Data → Storage → "Clear local database" (`clearLocalDatabase`, `MessagesStorage.java:1415` ✓, trims cached history). Failure mode is fail-closed: an active contact looks untrusted until they message again on N days, or until the user opens the chat (opening loads history into the table, ~). Recommended v1: accept the gap (no extra requests, no extra hook). If it bites, v2 adds our own table `tc_activity(uid INTEGER, day INTEGER, PRIMARY KEY(uid, day))` in the same database, fed from the top of `putMessagesInternal` and untouched by "clear local database" (~25 lines).
+### 2.3 Auto-download gate (A3-A5, C9)
+`if (!getTrustController().allows(message)) return 0;` at the top of `canDownloadMediaInternal(MessageObject)` (`messenger/DownloadController.java:688` ✓) and `canDownloadMediaInternal(MessageObject, long)` (`:778` ✓): these are the funnel for `canDownloadMedia(MessageObject)` (`:609`) and both `canDownloadMediaType` overloads (`:652`, `:670` ✓). Same line at the top of `canDownloadMedia(TLRPC.Message)` (`:861` ✓, used by the background download queue) and `canDownloadMedia(TLRPC.Message, MessageMedia)` (`:942` ✓). One extra line in `canDownloadMedia(MessageObject)` before its story branch (`:610-617` ✓), which returns `true` for a forwarded public story without reaching the funnel. `DownloadController.java` is identical in this region between 12.10.3 and 13.0.3 (C9, ✓ by line numbers). Story preload: `StoriesController.preloadStory(dialogId, ...)` already has the dialog (`ui/Stories/StoriesController.java:576-580` ✓), one line.
 
-### 2.3 Admin and contacts
-Admin/creator: `ChatObject.hasAdminRights(chat)` = `chat.creator || admin_rights.flags != 0` (`messenger/ChatObject.java:2123` ✓), `ChatObject.isCreator` (`:2127` ✓). Contacts: `ContactsController.contactsDict` (`messenger/ContactsController.java:238` ✓) or `isContact(userId)` (`:1770` ✓), the same map stock uses for its own contact class.
+Peerless callers (C9 asked to swap rather than wrap; swapping changes semantics, so wrap): `DialogCell.java:5801` passes `(AUTODOWNLOAD_TYPE_PHOTO, size)` inside `setThumb(int, MessageMedia)` (`:5779` ✓), wrap with `isTrusted(currentDialogId)`. `RichMessageLayout` has three `computeAutoDownload()` (`:6687` uses `getCurrentDownloadMask()`, `:7214` and `:8144` use `canDownloadMedia(TYPE_VIDEO, size)` ✓); the first returns true for every photo in a rich message whenever photo auto-download is on, a leak the draft missed. Each gets `if (!allows(root.messageObject)) return false;`; `root.messageObject` is null only for the no-message constructor (`:218` ✓), treated as allowed (~: previews of your own content).
 
-### 2.4 Gate points
-**Auto-download** (one line each, `if (!getTrustController().isTrusted(msg)) return 0;` or `false`), all in `messenger/DownloadController.java`:
-- `canDownloadMedia(MessageObject)` `:609` ✓, before the story branch (a forwarded public story otherwise loads regardless of presets, `:610-617` ✓).
-- `canDownloadMediaType(MessageObject)` `:652` ✓ and `canDownloadMediaType(MessageObject, long)` `:670` ✓.
-- `canDownloadMedia(TLRPC.Message)` `:861` ✓ (used by `MessagesStorage.java:12815` ✓ to queue background downloads of fresh messages, and `ChatActivity.java:41393`, `PhotoViewer.java:16492` ✓).
-- `canDownloadMedia(TLRPC.Message, TLRPC.MessageMedia)` `:942` ✓.
-- `canDownloadMedia(int type, long size)` `:627` ✓ has no peer. Wrap its peer-aware callers instead: `ui/Cells/DialogCell.java:5749` ✓ (chat-list thumbnail) and `messenger/RichMessageLayout.java:7209`, `:8139` ✓ (rich messages, `root` carries the account and message, ~). 3 lines.
+This covers every caller of `canDownloadMedia`, `canDownloadMediaType`, `canPreloadStories` and `computeAutoDownload` found by grep (C14e: a statement about those callers, not about every image load; image loads are G's job).
 
-These 8 sites cover every caller found: `grep` counts 11 in `ChatMessageCell`, 6 in `MessagesController` (via `getAutodownloadMask()` into `putMessages`), 5 in `PhotoViewer`, and singles elsewhere (✓ for the count; each caller funnels into one of the gated methods, ~ for the less common ones).
+### 2.4 Image gate G (A6): thumbnails, stickers, cached autoplay without touching ChatMessageCell
+Why here: the network thumbnails C1 found (video and GIF document thumbs, `currentPhotoObjectThumb` fallbacks, reply images at `ui/Cells/ChatMessageCell.java:19324`, `:19339` ✓, game previews short-circuiting at `:8743` ✓) and sticker playback all go through `ImageReceiver.setImage`, and every one passes the message as `parentObject` (sticker: `Object parentObject = messageObject`, `:9699` ✓; replies pass `messageObject` or `messageObject.replyMessageObject` ✓). One hunk in `ImageReceiver` replaces 4-8 hunks in the churniest file (C10).
 
-**Autoplay:** stock autoplay needs the media present or the download/stream allowed: GIF/round `autoDownload = canDownloadMedia(...)` then `if (mediaExists || autoDownload)` → autoplay (`ui/Cells/ChatMessageCell.java:8707-8721` ✓); streamed video `SharedConfig.isAutoplayVideo() && ... canStreamVideo() && canDownloadMedia(...)` (`:8691-8693`, `:10319-10320` ✓). So the download gate already stops autoplay of anything not yet on disk. Left open: media already cached (e.g. the same GIF seen in a trusted chat) still autoplays. Closing that needs a per-message check at the `SharedConfig.isAutoplayGifs()/isAutoplayVideo()` sites (`ChatMessageCell.java:3271`, `:4342`, `:8256`, `:8691`, `:9315`, `:10319`, `:18083`, `:18103` ✓), about 8 one-line edits; `LiteMode.isEnabled` (`messenger/LiteMode.java:149` ✓) is global and has no peer, so it is not the hook. Recommended: v1 relies on the download gate (the file was already decoded once when it was cached); the 8 edits are the v2 "block autoplay" toggle.
+Hunk at the top of `setImage(mediaLocation, mediaFilter, imageLocation, imageFilter, thumbLocation, thumbFilter, thumb, size, ext, parentObject, cacheType)` (`messenger/ImageReceiver.java:572` ✓): `if (parentObject instanceof MessageObject && TrustController.gateActive) { Location[] l = TrustController.filter(this, (MessageObject) parentObject, mediaLocation, imageLocation, thumbLocation); mediaLocation = l[0]; imageLocation = l[1]; thumbLocation = l[2]; }`.
 
-**Story preload:** `StoriesController.preloadStory(long dialogId, StoryItem)` checks `canPreloadStories()` at `ui/Stories/StoriesController.java:585` ✓; all three preload callers go through it (`:572-577`, `:878`, `:1545` ✓) and it already has `dialogId`. One line. Story playback inside the viewer is a user action and stays (see risks: auto-advance).
+`filter` passes everything through unless all hold: trust model and "tap to load" on; `getParentView()` (`:3254` ✓) is a `ChatMessageCell` or `DialogCell` (so the photo viewer, story viewer and instant view, which the user opened, are untouched); the message's chat is not trusted; the message is not in the session's tapped set. Then:
+- If `isForceLoding()` (`:384` ✓) is true, add the message to the tapped set and pass through. Every tap path in `didPressButton` (`ChatMessageCell.java:17854` ✓) sets `setForceLoading(true)` right before its `setImage` (`:17896`, `:17909`, `:17926`, `:17938` ✓); one branch near `:17935` calls `setImage` without it (~: the "already loading" case; its `FileLoader.loadFile` still runs).
+- Sticker document (`MessageObject.isStickerDocument` `:10271`): animated (`isAnimatedStickerDocument` `:10308`) or video (`isVideoStickerDocument` `:10283`) drops media and image locations and keeps the thumb (static webp) and the `pathThumb` outline; static stickers pass.
+- Anything else keeps a location only if it is local: `photoSize instanceof TL_photoStrippedSize` or `TL_photoPathSize`, or a non-http `path`, or (for photo, not document, locations) `messageObject.mediaExists` (`MessageObject.java:252` ✓). GIF, video and round-video document locations are dropped even when cached, which closes cached autoplay with no `SharedConfig.isAutoplay*` edits.
 
-**Link-preview images:** a webpage photo counts as a photo for auto-download: `MessageObject.isPhoto(TLRPC.Message)` returns true for `TL_messageMediaWebPage` with a photo (`messenger/MessageObject.java:10601-10602` ✓), and the webpage branch of the cell loads the full image only if `canDownloadMedia(currentMessageObject)` (`ChatMessageCell.java:8735` ✓), else only the thumb (`:8742-8745` ✓). So the auto-download gate covers it with no extra edit. The fallback thumb is `getClosestPhotoSizeWithSize(sizes, 40)` (`:8240`, `:8289` ✓), which in practice picks the embedded stripped size (~: `FileLoader.java:1457-1487` picks the largest size ≤ 40 px, and the stripped one is the only one that small in normal photos). A dedicated "link-preview images" toggle separate from the download toggle is one extra condition at `:8735` (gate only when `media instanceof TL_messageMediaWebPage`).
+The `thumb` drawable argument is never touched, so the embedded stripped image still shows. This replaces the draft's reasoning about `getClosestPhotoSizeWithSize(sizes, 40)` (C2 is right: `TL_photoStrippedSize` is 50 px and wins only as the first list entry; photos showed the stripped image because the cell prefers `strippedThumb` when present). G no longer depends on list order.
 
-**Calls, P2P:** engine flag `new Instance.Config(..., privateCall.p2p_allowed, ...)` at `messenger/voip/VoIPService.java:3420` ✓ → `privateCall.p2p_allowed && trusted(user.id)`; advertised flags `reqCall.protocol.udp_p2p = true` (`:1108` ✓, outgoing) and `udp_p2p = udp_reflector = true` (`:1877`, `:4367` ✓, accepting) → set `udp_p2p` from the same check. 4 lines. Group calls go through Telegram's servers anyway (~).
+Cost: one `instanceof` per `setImage` when the gate is off; when on, a few field reads and set lookups. `setImage` runs thousands of times while scrolling; nothing in `filter` allocates on the pass-through path (return the inputs; allocate the array only when something is dropped).
 
-### 2.5 Storage
-Same prefs file as `CustomSettings` (`getSharedPreferences("telegram_custom")`, created by patch 0003). Keys: `trust_on`, `trust_n`, `trust_d`, `trust_grace`, `trust_admin`, `trust_contacts`, `trust_sender`, `trust_block_*` (global); per account `trust_manual_<account>` as a `StringSet` of `"<dialogId>:<state>:<markedAtUnix>"`. `TrustController` keeps a parsed copy in memory and writes with `apply()`. Account-scoped like `hiddenCountersKey(account)` in 0003. Undo is free: every manual change is a toggle back.
+### 2.5 Direct-URL web documents (A7, C4)
+`ImageLocation.getForWebFile` turns a noproxy `WebFile` (`messenger/WebFile.java:61-71` ✓) into `imageLocation.path = webFile.url` (`messenger/ImageLocation.java:89-90` ✓), which `ImageLoader` fetches over plain HTTP from your IP. Add `if (webFile.noproxy && TrustController.blockNoProxy()) return null;` before it. Callers then show nothing (inline bot result thumbs in `ui/Cells/ContextLinkCell.java`, rich messages, invoice photos, ~ for each rendering an empty box gracefully). v1 blocks it for trusted bots too: `getForWebFile` has no chat context, and adding it means touching 20 caller files (✓ by grep). Proxied web documents (`location`-based, fetched by Telegram) are untouched.
 
-### 2.6 UI
-- **Chat header ⋮ menu:** one item "Trust this chat" / "Untrust this chat" / "Clear trust override", added next to the existing `headerItem.lazilyAddSubItem(...)` block (`ui/ChatActivity.java:4399-4440` ✓), new id constant beside `add_shortcut = 24` (`:1640` ✓), handler in the `onItemClick` chain next to `id == add_shortcut` (`:3897` ✓). After a change: `chatAdapter.notifyDataSetChanged()` so cells re-run `setMessageContent` (~). ~20 lines.
-- **Profile ⋮ menu:** same item in `ui/ProfileActivity.java` next to `otherItem.addSubItem(add_shortcut, ...)` (`:12135`, `:12197`, `:12249` ✓), handler beside `id == add_shortcut` (`:2727` ✓). ~15 lines.
-- **Visible state:** a small shield in the chat subtitle is tempting but touches the header layout; v1 shows the state only as the menu label ("Untrust" means it is trusted). Cheaper and honest.
-- **Settings screen:** a "Media trust" row in `SettingsActivity` exactly like Ghost mode's (`SettingCell.Factory.of(100, ...)` and `case 100:` in patch 0004; use id 101), opening a new `ui/TrustSettingsActivity.java` built on the same `UItem` list pattern: master switch, N/D/grace number rows, the rule toggles, the "untrusted means" toggles, and a list of manual marks (with dormant ones flagged and a one-tap remove). ~200 lines.
+### 2.6 Calls (A9)
+`new Instance.Config(..., privateCall.p2p_allowed, ...)` (`messenger/voip/VoIPService.java:3423` ✓) → `&& isTrusted(user.id)`; set `udp_p2p` from the same check at `:1111` (outgoing), `:1880` and `:4360` (accepting) ✓. This governs what our client advertises and what our engine uses. The server-side "Peer-to-peer" privacy rule (`ContactsController.PRIVACY_RULES_TYPE_P2P`) still decides who may go P2P with you when the other side offers it; keep it at "My contacts" or "Nobody" as the floor (C14g; test plan step 8). Group calls go through Telegram's servers (~).
 
-### 2.7 Line estimate
+### 2.7 Stickers and custom emoji
+Animated and video stickers are in v1 through G (no `ChatMessageCell` edit). Custom emoji are the stated exception: they draw through `ui/Components/AnimatedEmojiDrawable.java` (class `:60` ✓) whose `ImageReceiver` parent is the emoji document, not the message, so G cannot see the chat; threading the chat through means editing every text-drawing caller (~40-80 lines, high churn). Not planned unless the user asks.
 
-| Piece | Lines |
-|---|---|
-| `TrustController.java` (rules, query, cache, prefs) | 180 |
-| `DownloadController` gates + 3 caller wraps | 12 |
-| Story preload gate | 1 |
-| VoIP P2P | 4 |
-| Chat menu + profile menu | 35 |
-| Settings row + `TrustSettingsActivity` | 205 |
-| Optional: cached-media autoplay (8 sites) | 8 |
-| Optional: own activity table | 25 |
-| **v1 total** | **~440, of which ~55 inside upstream files** |
+### 2.8 Storage (A1)
+Prefs file `telegram_custom` (patch 0003's `CustomSettings.prefs()` is private; `TrustController` opens the same file by name). Global keys `trust_on`, `trust_n`, `trust_d`, `trust_grace`, `trust_admin`, `trust_contacts`, `trust_sender`, `trust_tap`, `trust_relay`; per account `trust_marks_<account>` as a `StringSet` of `"<dialogId>:<state>:<markedAtUnix>"` and `trust_backfilled_<account>`. Undo is free: every mark change is reversible from the same menu.
 
-### 2.8 Desktop-like "exceptions" check
-Android 12.10 has no per-chat auto-download exception list: `canDownloadMediaInternal` (`DownloadController.java:688-776` ✓) consults only the contact/private/group/channel class and the presets. So nothing stock to reuse here, unlike desktop (3.4).
+### 2.9 UI (A10, A11, C10, C13)
+**Chat ⋮ menu only** (no profile menu). New id beside `add_shortcut = 24` (`ui/ChatActivity.java:1656` ✓); item added in the `headerItem.lazilyAddSubItem` block (`:4445-4486` ✓, after `change_colors`); handler beside `id == add_shortcut` (`:3939` ✓). Label states first, action second: "Untrusted · Trust this chat", "Trusted (you) · Untrust", "Trusted (admin) · Never trust", "Trusted (active contact) · Never trust", "Dormant (you) · Trust again", "Never trusted · Clear". Keep the returned item and `setText` after a change. After a change: `getChatListView().getAdapter().notifyDataSetChanged()` (`:1760` ✓) so cells rebind.
 
-### 2.9 Optional: static stickers and custom emoji in untrusted chats
-Stickers bypass auto-download: in the sticker branch the cell loads the document unconditionally (`ChatMessageCell.java:9760-9770` ✓, video sticker via `AUTOPLAY_FILTER`, animated via rlottie). Static-in-untrusted means: for video (webm, ffmpeg/vpx) and animated (TGS, rlottie) stickers, load only `currentPhotoObjectThumb` / `pathThumb` (the vector outline) plus a tap-to-play. ~15 lines in that branch. Custom emoji render through `ui/Components/AnimatedEmojiDrawable.java` (class at `:60` ✓), which already has a static-thumb path (`svgThumb`, `:636-671` ✓) but no per-chat context; threading the chat into it touches every text-drawing caller, ~40-80 lines and high churn. Recommendation: stickers yes (cheap), custom emoji only if the user wants it after seeing stickers.
+**First-block toast:** the first time `allows()` returns false for a message whose chat is open (`LaunchActivity.getSafeLastFragment()` `ui/LaunchActivity.java:8784` ✓ is a `ChatActivity` with that `getDialogId()` `:12888` ✓), once per dialog per session, post on the UI thread `BulletinFactory.of(fragment).createSimpleBulletin(icon, "Media here waits for a tap", "Trust this chat", action)` (`ui/Components/BulletinFactory.java:447` ✓; icon an existing `R.raw` one, ~). The action sets the mark and refreshes the list as above. Lives in `TrustController`, no `ChatActivity` hunk. ~20 lines (inside A1).
+
+**Settings:** row 101 next to Ghost mode's 100 (`ui/SettingsActivity.java:708`, `case` in `:845` ✓; patch 0004's pattern), subtitle "On · 3 days in 90". It opens `TrustSettingsActivity`: one screen, nine rows (master, N, D, grace as number rows with a picker dialog, rules 4/7/8, tap to load, relay calls). No list of marks (C8).
 
 ## 3. 🖥️ desktop design
 
-### 3.1 Where trust is computed
-New `custom/custom_trust.{h,cpp}` (beside `custom/custom_settings.*` from patch 0003, added to `Telegram/CMakeLists.txt` the same way). `Custom::Trusted(not_null<PeerData*> peer)` and `Custom::Trusted(not_null<HistoryItem*>)` (rule 8 with `item->from()`); per-session state hangs off `Main::Session` via a static `base::flat_map<not_null<Main::Session*>, State>` (keeps it out of upstream classes). Admin: `ChannelData::amCreator()` / `hasAdminRights()` (`data/data_channel.h:358`, `:385` ✓), `ChatData` same (`data/data_chat.h:67`, `:88` ✓). Contacts: `UserData::isContact()` (`data/data_user.h:261` ✓); bots `isBot()` (`:205` ✓); self `isSelf()`, service `isServiceUser()` (`data/data_peer.h:274`, `:298` ✓).
+### 3.1 custom_trust (D1)
+`custom/custom_trust.{h,cpp}` beside `custom/custom_settings.*` (patch 0003), added to `Telegram/CMakeLists.txt` the same way. `Custom::Trusted(not_null<PeerData*>)`, `Custom::Allows(not_null<const HistoryItem*>)`, `SetMark`, `NoteIncoming`, pure `Decide(...)` for the test. State per `Main::Session` in a static `base::flat_map` (no upstream class changes). Contacts `UserData::isContact()` (`data/data_user.h:261` ✓), bots `isBot()` (`:205`), self `isSelf()` and service `isServiceUser()` (`data/data_peer.h:274`, `:298` ✓).
 
-### 3.2 The activity rule without a message database
-tdesktop keeps history in memory only; nothing to query after a restart. Options:
+### 3.2 Activity log (D2): own log only, no server seeding (C7)
+tdesktop keeps no message database. `NoteIncoming` from `History::createItem` (`history/history.cpp:576` ✓), the point every `MTPMessage` becomes an item, history pages included; stock counts outgoing messages there for top peers (`:595-596` ✓, realtime only), ours runs for `!result->out() && peer->isUser() && !result->isService()` whether or not the message is new. Stored per account as `{peerId: [day, ...]}` pruned to 365 days, batched to disk (dirty flag, atomic `QSaveFile` on a 10 s timer and on quit). **UX, said plainly:** on desktop a contact becomes trusted by the activity rule once they have messaged you on `N` days since install, or once you have scrolled their private chat far enough back to load `N` days. No background requests (the draft's `messages.getHistory` seeding is dropped: new traffic, and `limit=100` under-counts chatty contacts, C7).
 
-| Option | How | Cost | Accuracy |
-|---|---|---|---|
-| A. Own activity log | `activity_<userId>.json` per account: `{peerId: [day, ...]}` pruned to `D` days; fed by every incoming private message the client materialises (realtime updates, history pages, dialog tops) | 1 hook, a few KB on disk, no requests | Starts empty on a new profile; fills as messages arrive; survives restarts |
-| B. Loaded history only | count days in `History` blocks in memory | 0 storage | Resets every restart: everyone untrusted until their chat is opened. Fail-closed but useless |
-| C. Server search | per contact `messages.getHistory` (or `messages.search` with `from_id` and `min_date`) and count days | 1-3 requests per contact per refresh; hundreds a day → flood-wait risk | Exact, any time |
+### 3.3 Gates (D3-D8)
+- **Auto-download and autoplay** (`data/data_auto_download.cpp`): `Should(data, peer, document)` `:367`, put the trust check before `if (document->sticker()) return true;` (`:371` ✓) for non-stickers and before `isGifv() → true` (`:377-378` ✓); `Should(data, peer, photo)` `:406`; `ShouldAutoPlay(data, peer, document)` `:426`; `ShouldAutoPlay(data, peer, photo)` `:449` ✓. Autoplay is the `AutoPlay*` types of the same table, so this includes media already cached. The peerless `Should(data, document)` (`:395`) is used only with no item (`data/data_document_media.cpp:333` ✓) and for stickers (below); left alone.
+- **Photo thumbnails, reply photos:** `PhotoMedia::autoLoadThumbnailAllowed(peer)` (`data/data_photo_media.cpp:153-162` ✓) loads Small/Thumbnail whenever they exist; return false when untrusted. Reply previews call it (`data/data_reply_preview.cpp:110-114` ✓).
+- **Document thumbnails, reply documents:** `DocumentData::loadThumbnail(FileOrigin)` (`data/data_document.cpp:870` ✓) is the one function behind `loadThumbnail` at `history_view_gif.cpp:262`, `:1214`, `history_view_document.cpp:455` and `DocumentMedia::thumbnailWanted` (`data/data_document_media.cpp:242-245` ✓, used by replies `data_reply_preview.cpp:78` ✓). Gate: if the origin is a message (`FullMsgId`) and its item is not allowed and the document is not a sticker and not already loaded or loading, return. ~6 lines (~ for the origin variant accessor).
+- **Link previews:** large image through `Photo::automaticLoad` (gated above); the side image calls `_photoMedia->wanted(PhotoSize::Thumbnail, ...)` unconditionally (`history/view/media/history_view_web_page.cpp:944` ✓); gate it with `_parent->data()`.
+- **Stickers static (D5):** in-chat stickers load through `checkStickerLarge()` → `automaticLoad(origin, nullptr)` (`data_document_media.cpp:288` ✓), i.e. with no peer, so `data_auto_download.cpp` cannot see the chat. Gate in `Sticker::readyToDrawAnimationFrame` (`history/view/media/history_view_sticker.cpp:190-195` ✓): when the item is not allowed and the sticker is animated or video, skip `checkStickerLarge()` and `setupPlayer()`, so the view keeps drawing its thumbnail (loaded at `:103` ✓). Covers cached stickers too. Clicking a sticker opens its pack (stock, ~).
+- **Direct-URL web documents (D6):** `FromWebDocument` maps `MTPDwebDocumentNoProxy` to `PlainUrlLocation` (`ui/image/image_location_factory.cpp:306`, `:320-331` ✓), downloaded by `storage/file_download_web.cpp` from your IP; return an empty `ImageLocation()` while the trust model is on.
+- **Stories (D7):** in `Stories::startPreloading` (`data/data_stories.cpp:2611` ✓), after the `Expects` (`:2612`) and before `make_unique<StoryPreload>` (`:2615`, else the loader starts: C14d): if the peer is untrusted and the id is not in `_toPreloadViewer`, `preloadFinished(id, false); return;` (`:2624-2637` ✓ erases it from all queues and continues).
+- **Calls (D8):** `.enableP2P = call.is_p2p_allowed()` (`calls/calls_call.cpp:1090` ✓) → `&& Custom::Trusted(_user)` (`calls/calls_call.h:331` ✓); drop `f_udp_p2p` at `:356`, `:490`, `:974` when untrusted. `:1050` logs the result (test step 7). Server-side P2P rule is the floor, as on Android.
 
-**Recommendation: A, seeded lazily by C.** A carries the steady state for free. The gap (new profile, or a contact who was active before install) is filled by one capped `messages.getHistory(peer, limit=100)` for a contact the first time the client needs a trust decision about them and their log has fewer than `N` days but the dialog's last message is inside the window. Queue at most one request per 2 s, 50 per day, once per peer ever (a `seeded` flag in the same file). These requests go to Telegram about your own chats, which it already has; the only cost is rate limits. Until seeded the peer is untrusted (fail closed); `Photo::draw` calls `automaticLoad` on every paint (`history/view/media/history_view_photo.cpp:340-348` ✓), so a repaint after seeding re-evaluates with no extra plumbing.
-
-**Feed hook:** `History::createItem` (`history/history.cpp:576` ✓) is where every `MTPMessage` becomes an item; stock already counts outgoing messages there for top peers (`session().topPeers().increment(peer, result->date())`, `:595-596` ✓, realtime only; ours must not require `newMessage`, so history pages count too). Add the mirror line for `!result->out() && peer->isUser()`. 2 lines. Writes are batched (dirty flag, `QSaveFile` atomic save on a 10 s timer and on quit), same atomic pattern as `custom_settings.cpp`.
-
-### 3.3 Gate points (`data/data_auto_download.cpp` unless noted)
-- `Should(data, peer, document)` `:367` ✓: insert after the sticker line (`:371` ✓) and before `isGifv() → true` (`:377-378` ✓), else GIFs always download.
-- `Should(data, peer, photo)` `:406` ✓.
-- `ShouldAutoPlay(data, peer, document)` `:426` ✓ and `ShouldAutoPlay(data, peer, photo)` `:449` ✓. Autoplay on desktop is the `AutoPlay*` types of the same table (feasibility D5 ✓), so this one function pair is the whole autoplay gate, including cached media (better than Android).
-- Peerless `Should(data, document)` `:395` ✓ is used only when there is no item (`data/data_document_media.cpp:333` ✓); leave it.
-- **Network thumbnails:** `PhotoMedia::autoLoadThumbnailAllowed(peer)` (`data/data_photo_media.cpp:153-162` ✓) loads the Small/Thumbnail size whenever it exists, regardless of settings. Gate it, so untrusted chats show only the inline (embedded) thumbnail. 1 line. Document thumbnails (`_data->loadThumbnail(...)` at `history/view/media/history_view_gif.cpp:262`, `:1214`, `history_view_document.cpp:455` ✓) load unconditionally too; gating them needs the item's peer at each of the 3 sites (~3 lines).
-- **Stories:** `Stories::startPreloading(story)` (`data/data_stories.cpp:2611` ✓) is the one place a preload starts; if the story's peer is untrusted and the id is not in `_toPreloadViewer` (the open viewer), call `preloadFinished(id, false)` (`:2624-2637` ✓, drops it from the queues and moves on). ~5 lines.
-- **Link previews:** the large preview photo goes through `Photo::automaticLoad(peer)` (gated above, `history_view_photo.cpp:348`, `:824` ✓); the small side image calls `_photoMedia->wanted(PhotoSize::Thumbnail, ...)` unconditionally (`history/view/media/history_view_web_page.cpp:944` ✓). Gate that call. 2 lines.
-- **Calls P2P:** `.enableP2P = call.is_p2p_allowed()` (`calls/calls_call.cpp:1090` ✓) → `&& Custom::Trusted(_user)` (`_user` member, `calls/calls_call.h:331` ✓); drop `f_udp_p2p` at the three request sites `:356`, `:490`, `:974` ✓ when untrusted. ~6 lines.
-
-### 3.4 Reuse stock per-chat exceptions
-tdesktop already has per-peer auto-download exceptions: `Override { Default, ForceAllow, ForceDeny }` (`data/data_auto_download.h:50-54` ✓), consulted by every gate above via `data.peerOverride(peer->id)` (`data_auto_download.cpp:374`, `:410`, `:433`, `:456` ✓), edited in Settings → Advanced → Automatic media download → "Always"/"Never" lists (`boxes/auto_download_box.cpp:355-361` ✓), stored in the session settings. Recommended: read a stock "Never" as our "never trust" and a stock "Always" as hand-trusted (both are the user's own per-chat decision); keep our own list for everything else, because the stock override has no timestamp (needed for the person grace period) and Android has no equivalent. Our own list stays the source of truth for the trust menu item.
+### 3.4 Stock exceptions reused
+`Override { Default, ForceAllow, ForceDeny }` (`data/data_auto_download.h:50-54` ✓), the Settings → Advanced → Automatic media download "Always"/"Never" lists (`boxes/auto_download_box.cpp:355-361` ✓): a stock "Never" reads as never-trust, a stock "Always" as trusted by hand (rule 3/5 with `markedAt` = first seen). Our own marks stay the source of truth for the menu.
 
 ### 3.5 Storage
-Global rule settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, patch 0003's `custom_settings.cpp`). Per account: `trust_<selfUserId>.json` holding the manual marks `{peerId: {state, markedAt}}` plus the activity log and seeded flags (one file per account, so one account's churn never rewrites another's). Atomic `QSaveFile`, same as 0003.
+Global settings: new keys in `custom.json` (`cWorkingDir() + "custom.json"`, patch 0003). Per account: `trust_<selfUserId>.json` with marks `{peerId: {state, markedAt}}` and the activity log. Atomic `QSaveFile`.
 
-### 3.6 UI
-- **Peer menu:** new `Filler::addToggleTrust()` in `window/window_peer_menu.cpp`, called from `fillHistoryActions` (chat ⋮, `:1922` ✓), `fillContextMenuActions` (chat-list right-click, `:1897` ✓) and `fillProfileActions` (`:1945` ✓). Label flips between "Trust this chat" / "Untrust this chat", with "Clear trust override" when a manual mark exists. ~30 lines.
-- **Settings section:** a "Media trust" button at the end of `BuildAutoDownloadSection` (`settings/sections/settings_advanced.cpp:217-256` ✓, the same section as the stock auto-download rows) opening a `Ui::GenericBox`: master switch, N/D/grace sliders, the rule toggles, the "untrusted means" toggles, and the manual list. ~150 lines. A main-menu entry like Ghost mode's is not worth it: this is set once, not toggled daily.
+### 3.6 UI (D9, D10, C13, C14f)
+**Chat ⋮ menu only:** `Filler::addToggleTrust()` called from `fillHistoryActions` (`window/window_peer_menu.cpp:1922` ✓), same state-first labels as Android. After a change, repaint the open history so `draw` re-runs the gates (`Photo::draw` calls `automaticLoad`, `history/view/media/history_view_photo.cpp:340-348` ✓): `session.data().requestViewRepaint(view)` for each view of that history (`data/data_session.h:408` ✓), ~6 lines.
 
-### 3.7 Line estimate
+**First-block toast:** first gate refusal for an item in the chat shown by the active window, once per peer per session, via `crl::on_main` → `Window::Controller::showToast(Ui::Toast::Config)` (`window/window_controller.h:84` ✓) with "Media here waits for a tap. Trust this chat" where the link sets the mark (~ for the click-handler field name). ~20 lines in D1.
 
-| Piece | Lines |
-|---|---|
-| `custom_trust.{h,cpp}` (rules, log, lazy seed queue, storage) | 260 |
-| Auto-download/autoplay/thumbnail gates | 10 |
-| Story preload | 5 |
-| Webpage side image | 2 |
-| Calls P2P | 6 |
-| Feed hook in `History::createItem` | 2 |
-| Peer menu | 30 |
-| Settings button + box | 160 |
-| CMakeLists | 2 |
-| **total** | **~480, of which ~60 inside upstream files** |
+**Settings:** one "Media trust" button at the end of `BuildAutoDownloadSection` (`settings/sections/settings_advanced.cpp:217` ✓) opening one compact box with the same nine rows. C8 asked for no box; disagree in one line: the three numbers need an input, and a small box is the cheapest input tdesktop has (~75 lines, still under half the draft's 160).
 
-### 3.8 Optional: static stickers
-`Should(...)` and `ShouldAutoPlay(...)` return true for every sticker (`data_auto_download.cpp:356`, `:371`, `:398`, `:430` ✓) and `history_view_sticker.cpp:103` ✓ loads its thumbnail unconditionally. Static-in-untrusted: in `HistoryView::Sticker`, for animated (`isAnimated`, rlottie) and video (`isVideo`, ffmpeg) stickers, draw the thumbnail and skip creating the player until clicked (~20-30 lines, ~). Custom emoji go through `Data::CustomEmoji` with no chat context; same verdict as Android: stickers yes, custom emoji later if wanted.
+## 4. 🧪 test plan
 
-## 4. 🧪 test plan (no device needed for the first half)
+### 4.1 Caller-count guard (C1, C11)
+`.github/media-callers.txt`: one line per `platform<TAB>pattern<TAB>file<TAB>count`, counted on the **upstream** tree before patches apply. Patterns: Android `canDownloadMedia(`, `canDownloadMediaType(`, `canPreloadStories(`, `getCurrentDownloadMask(`, `computeAutoDownload(`, `getForWebFile(`, `preloadStory(`, `udp_p2p`; desktop `AutoDownload::Should(`, `AutoDownload::ShouldAutoPlay(`, `autoLoadThumbnailAllowed(`, `loadThumbnail(`, `thumbnailWanted(`, `checkStickerLarge(`, `startPreloading(`, `PlainUrlLocation`, `f_udp_p2p`. `.github/media-callers.sh check <platform> <tree>` greps, prints a diff and exits 1 on any change; `update` rewrites the platform's lines. A step in `android.yml` and `desktop.yml` right after checkout, so the upstream workflow's red path (an issue naming the failed step) names the new caller. The table is updated in the same commit as each port, after reading every new caller.
 
-**Checkable by reading code and CI:**
-- Every gate in 2.4 and 3.3 compiles and is reached: CI build plus a `grep` that each listed site carries a `telegram-custom` marker.
-- Caller coverage: re-run the caller `grep`s (`canDownloadMedia(`, `AutoDownload::Should`, `ShouldAutoPlay`, `preloadStory(`, `startPreloading(`) after every upstream bump and diff the list against this doc; a new caller is a new leak.
-- Rule logic is pure: `TrustController.decide(inputs)` / `Custom::TrustDecide(inputs)` take plain values (kind, flags, manual state, active-day count, now) so a JVM unit test and a small C++ test can run the table in section 1 row by row in CI, including decay edges (day `D` vs `D+1`, grace expiry, never-trust beating admin).
-- Activity SQL: run the query from 2.2 against a synthetic SQLite with the same schema and index (`EXPLAIN QUERY PLAN` must show `uid_date_mid_idx_messages_v2`).
+### 4.2 Without a device
+- CI builds both patches; C1 passes.
+- `decide()` unit tests run the section 1 table row by row, with edges: day `D` vs `D+1`, grace expiry, never-trust beating admin, rule 4 on a non-creator supergroup admin (untrusted), rule 8 off by default, bots never by activity.
+- Activity feed: a JVM test feeding synthetic `TLRPC.Message` lists (incoming, outgoing, service, scheduled, group) into `noteIncoming` against an in-memory SQLite asserts only the right `(uid, day)` rows land (~ for running `SQLiteDatabase` off-device: may need Robolectric; else code reading).
+- Code reading: every anchor in section 0 carries a `telegram-custom` marker; `grep` count matches the build list.
 
-**Needs the user, on the phone and the laptop:**
-1. Untrusted group: a new photo shows blurred, loads on tap; a GIF does not play until tapped.
-2. Trusted (admin) channel: media loads as stock.
-3. Mark a non-contact person trusted: media loads; set `grace` to 0 in settings: it drops (they have fewer than N days); remove the mark: stays untrusted.
-4. An active contact (writes most days) is trusted without any mark.
-5. A link with a preview from an untrusted chat: card text shows, image waits for a tap.
-6. Stories ring of an untrusted person: opening is instant on trusted peers, shows loading on untrusted ones (no preload).
-7. Call an untrusted contact: call works; on desktop the call log line `p2p` reads false (`calls_call.cpp:1050` ✓ logs it); Android shows no P2P indicator in stock (~), so there the proof is the code path plus the user hearing the call connect.
-8. Clear local database (Android) and confirm the expected fail-closed drop of an active contact, then reopening their chat restores it.
+### 4.3 On the phone and the laptop (the user)
+1. Untrusted group: a photo, a video and a GIF show blurred; nothing plays; a tap loads that one.
+2. A reply quoting a photo in that group shows a blurred quote image.
+3. Animated and video stickers there are still pictures; tapping opens the pack.
+4. The first blocked item shows the toast; "Trust this chat" loads everything and the menu now reads "Trusted (you) · Untrust".
+5. A channel you admin and an active contact load as stock with no mark.
+6. Link preview from an untrusted chat: card text shows, image blurred until tapped.
+7. Call an untrusted contact: it connects; desktop log line shows `p2p` false (`calls_call.cpp:1050`); Android has no indicator in stock (~), code path only.
+8. Settings → Privacy → Calls → Peer-to-peer is "My contacts" or "Nobody" on the account (the server-side floor).
+9. Stories of an untrusted peer open with a loading spinner; trusted ones open instantly.
+10. An inline bot whose results used direct URLs shows empty thumbnails (expected).
 
 ## 5. ⚠️ risks
 
-**Upstream churn per hook point:**
-
-| Hook | Churn | Why |
+| Hook | Churn | Note |
 |---|---|---|
-| Android `DownloadController` 5 methods | low | stable for years; signatures unchanged across 11.x-12.x (~) |
-| Android `ChatMessageCell` (optional autoplay, stickers) | **high** | 29.5k-line file, rewritten every release; keep edits to v2 and one-liners |
-| Android `RichMessageLayout`, `DialogCell` wraps | medium | rich messages are new and moving |
-| Android `ChatActivity` / `ProfileActivity` menus | medium | menu blocks get reshuffled; the patch is additive, conflicts are context-only |
-| Android `VoIPService` | low | |
-| Desktop `data_auto_download.cpp` | low | small file, stable API |
-| Desktop `data_stories.cpp` preload | medium | stories code still evolving; 0004 already patches this file |
-| Desktop `window_peer_menu.cpp` | medium | additive filler, list order changes often |
-| Desktop `History::createItem` | low-medium | central, but our line sits beside a stable `topPeers` call |
+| `DownloadController` funnels (A3, A4) | low | unchanged between 12.10.3 and 13.0.3 in this region |
+| `ImageReceiver.setImage` (A6) | low-medium | 11-arg signature stable (~); the gate's correctness depends on tap paths keeping `setForceLoading(true)` and on cells keeping themselves as `parentView` |
+| `RichMessageLayout` (A5) | medium | new feature, moving |
+| `ChatActivity` menu (A10) | medium | menu block moved 46 lines in one release (C10); additive hunk, anchor on `add_shortcut` |
+| `MessagesStorage` feeds (A2) | low | two one-line calls at function tops |
+| `VoIPService` (A9) | low | |
+| desktop `data_auto_download.cpp`, `data_document.cpp`, `data_photo_media.cpp` | low | small, stable data-layer files |
+| desktop `history_view_sticker.cpp`, `history_view_web_page.cpp` | medium | view files, but one line each |
+| desktop `data_stories.cpp` | medium | patch 0004 also edits it |
+| desktop `window_peer_menu.cpp` | medium | additive filler |
 
-**The real churn risk is a new caller, not a broken hook:** upstream adds a fresh media path (as rich messages did) that calls the peerless API, and media in untrusted chats loads again with no build error. The caller `grep` in section 4 is the guard; make it a CI step that fails on an unknown caller.
+**The real risk is a new caller that compiles** (rich messages were one): C1 turns it into a red build. G narrows the residual further on Android, because any new cell path that passes the message as `parentObject` is covered without being listed.
 
-**Performance:** Android `isTrusted` on the bind path must stay set lookups; the SQL runs off-thread and is bounded by the candidate count. Desktop gates run in `draw`; same rule, everything precomputed. Desktop lazy seed is capped at 50 requests a day.
+**G-specific risks:** a stock path that loads a message image in a cell without `forceLoading` after a tap (one branch near `ChatMessageCell.java:17935`, ~) leaves that item blurred until the next tap; a downloaded video or GIF shows its blurred thumbnail after a restart until tapped again (the tapped set is per session; the cached file plays instantly on tap). Both fail closed.
 
-**False untrust (annoying, safe):** fresh install, cleared database (Android), a contact who calls but never texts, a close friend who sends one long burst a month (1 active day), voice-call-only relationships, a person who writes only in shared groups (rule 7 counts the private chat only). Mitigation: hand mark (decays the same way, so a monthly-burst friend needs `N` lowered or a long `grace`; see question 3).
+**False untrust (safe, annoying):** fresh desktop install; a contact who only calls; a friend who writes in one burst a month; people who write only in shared groups. The fix is a hand mark (which decays the same way, so lower `N` or raise `grace`).
 
-**False trust (the dangerous side):** an admin chat where you admin a large public group full of strangers (rule 4 trusts every sender's media there); a compromised trusted account; a forwarded malicious file inside a trusted chat (trust is about the chat, not the file's origin); rule 8 lets a trusted contact's message load in a hostile group, which is intended. A stranger cannot become trusted without being a contact or being marked by you, and contact status is something they cannot set for you.
+**False trust (dangerous side):** a compromised trusted account; a forwarded malicious file inside a trusted chat (trust is per chat, not per file origin); rule 8 if the user turns it on. A stranger cannot become trusted without being your contact or marked by you.
 
-**Leaks not covered by this design:** media already cached on disk plays (Android v1); stickers and custom emoji (optional item); avatars and profile photos (always load, every client does; ~); in-viewer story auto-advance to the next peer loads that peer's story (user started the viewer); P2P privacy on the server still governs who *you* expose to when the *other* side is a trusted contact.
+**Performance:** G runs on every `setImage`; pass-through costs one `instanceof` when off and a few lookups when on, no allocation. Activity SQL is a tiny table. Desktop gates run in `draw`, all precomputed.
 
-## 6. 🤔 open questions (my recommended answer first)
+## 6. 🤔 open questions (each has a default in the build; user to confirm)
 
-1. **Hand-trusted person who goes quiet: dormant or deleted?** Recommended: dormant (mark kept, revives when they are active again, shown as "dormant" in the list). Alternative: delete the mark at expiry.
-2. **Does activity in shared groups count toward a person's active days?** Recommended: no, private chat only ("messaged me"); it keeps the query on one index and matches the words. Alternative: count their group messages too (heavier query, a talkative group member becomes trusted).
-3. **Grace for a fresh hand mark:** recommended `grace = D` (90 days of trust after marking, then the activity rule). Alternative: 0 (activity applies at once, so a quiet friend never sticks).
-4. **Admin rule for large public groups:** recommended trust only chats you *created* plus channels you admin, not supergroups where you are a non-creator admin. Alternative: the user's literal wording (any admin), which trusts strangers' media in big groups you moderate.
-5. **Trusted sender inside an untrusted group (rule 8):** recommended on. Alternative: chat-level only, simpler mental model.
-6. **Android: own activity table now, or accept the cleared-database gap?** Recommended: accept for v1, add the table if the user ever clears the database.
-7. **Desktop: allow the lazy server seed (up to 50 history requests a day)?** Recommended: yes. Alternative: log only, so active contacts become trusted only after N new days of messages after install.
-8. **Android cached-media autoplay (8 edits in the churniest file):** recommended: skip in v1.
-9. **Desktop: honour the stock "Always"/"Never" exception lists as trust marks?** Recommended: yes.
-10. **Static stickers / custom emoji in untrusted chats:** recommended: stickers in v2 (cheap, both platforms), custom emoji not planned.
-11. **Telegram service account (777000) trusted by default?** Recommended: yes (login codes and security notices come from it; its media is Telegram's own).
+1. **Hand-trusted person who goes quiet:** dormant, revives when active again. Default, user to confirm. Alternative: delete the mark at expiry.
+2. **Group activity counts toward a person's active days?** No, private chat only ("messaged me"). Default, user to confirm.
+3. **Grace for a fresh hand mark:** 90 days (= `D`). Default, user to confirm. Alternative: 0.
+4. **Admin rule scope:** groups you created plus channels you create or admin; not supergroups where you are a non-creator admin. Default, user to confirm. Alternative: any chat you admin (your literal wording; trusts strangers' media in big groups you moderate).
+5. **Trusted sender widens a message inside an untrusted group (rule 8):** off. Default, user to confirm.
+6. **Direct-URL web documents blocked even for trusted bots in v1:** yes. Default, user to confirm (v2 can thread the bot through the inline-results cell).
+7. **Custom emoji keep animating in untrusted chats:** yes, stated exception. Default, user to confirm.
+8. **Desktop activity rule starts empty (no server seeding):** yes. Default, user to confirm.
+9. **Desktop: stock "Always"/"Never" lists count as trust marks:** yes. Default, user to confirm.
+10. **Telegram service account 777000 trusted:** yes. Default, user to confirm.
+11. **Per-device marks, no sync:** yes. Default, user to confirm.
+
+## 7. 📝 critique 1 dispositions
+
+| C | Disposition |
+|---|---|
+| 1 | Fixed: gate G on Android (one `ImageReceiver` hunk), `loadThumbnail` + `autoLoadThumbnailAllowed` + web-page side image on desktop |
+| 2 | Fixed: reasoning replaced; G does not rely on list order |
+| 3 | Fixed in v1: animated/video stickers static on both; custom emoji a stated exception |
+| 4 | Fixed: noproxy web documents blocked while the model is on (no per-bot exception in v1) |
+| 5 | Fixed: rule 8 default off |
+| 6 | Fixed: own activity table on Android, fed at both storage entry points (C6 named one; history pages use a second); same arrival model as desktop |
+| 7 | Taken: no desktop seeding |
+| 8 | Taken, partly: one compact screen per platform, one "tap to load" toggle; desktop keeps a small box for number input (reason in 3.6) |
+| 9 | Taken: 4 funnel hunks + 1 story line; peerless callers wrapped, not swapped (swapping changes the type check) |
+| 10 | Taken: chat menu only, no profile menu, no `ChatMessageCell` edits; re-pinned to 13.0.3 |
+| 11 | Taken: caller table + script in CI (4.1) |
+| 12 | Fixed: per-device scope paragraph |
+| 13 | Taken: first-block toast + state-first labels |
+| 14 | a: service messages excluded; b: games covered by G; c: snapshot reads; d: check before `make_unique`; e: claim narrowed; f: repaint on mark change; g: server P2P floor in the test plan |
