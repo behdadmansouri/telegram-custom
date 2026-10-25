@@ -4,6 +4,12 @@
 - [ ] 🧍 **Give CI a bot for the channel posts** `S`: new bot + channel, two `gh secret set` commands, then Actions → announce to check: [USAGE.md](USAGE.md) → announcements
 - [ ] 🧍 **Delete the stale `TG_BOT_TOKEN` and `TG_CHANNEL` repo secrets** `S`: replaced by `TELEGRAM_*`; `TG_CHANNEL` held a placeholder
 - [ ] 🤖 **Merge `android-gallery-trash` to `main` once tried on the phone** `S`: CI build of the branch, then the first Release
+- [ ] 🤖 **Auto-upstream workflow** `M`: daily bump → build → `main` → Release, issue on failure: [plan](docs/plan.md) → batch 2 step 1
+- [ ] 🤖 **Laptop update timer** `S`: daily `install.sh --release` + notification: batch 2 step 2
+- [ ] 🧍 **Install Obtainium on the phone and add this repo** `S`: steps in [USAGE.md](USAGE.md) → android
+- [ ] 🤖 **Batch-2 patches** `M`: build number in the menus, captioned photos auto-ungroup, 8 accounts: batch 2 step 4
+- [ ] 🤖 **Trust model** `L` `think`: trusted chats load media, untrusted load nothing: [docs/trust.md](docs/trust.md)
+- [ ] 🤖 **"What's custom" section** `L`: a card per patch with before/after: batch 2 step 7
 - [ ] 🤖 **Spy essentials (desktop)** `L`: keep deleted + edited messages; storage question below
 - [ ] 🤖 **Message filters (desktop)** `L`: regex hide rules + hide-everything-from list
 
@@ -16,9 +22,8 @@
 - [ ] 🤖 **Each `main` release has an attestation and a channel post** - `gh attestation verify` on the APK; the post in the channel.
 
 ## 🤔 Needs your call
+- [ ] 🧍 **More hardening: which of these?** `S`: typing previews, secret-chat previews, static stickers in untrusted chats, local drafts, no Google libs: [plan](docs/plan.md) → batch 2 step 6
 - [ ] 🧍 **Back up `.secrets/`** `S`: the Android signing key; lose it and every update needs an uninstall
 - [ ] 🧍 **Spy essentials: encrypt the saved deleted messages?** `S` `think`: my pick is encrypted under the local passcode (AyuGram keeps them in plaintext)
 
 ## 📋 Backlog
-- [ ] 🤖 **Hardening patches** `M`: no link-preview fetch while typing, local-only drafts (plan phase 4)
-- [ ] 🤖 **Update script** `M`: bump `*/UPSTREAM` to the newest upstream, rebuild, report patches that no longer apply
