@@ -20,6 +20,9 @@
 | android/patches/ | Android patch series | 2026-09-23 |
 | .github/workflows/android.yml | CI build of the APK (artifact; on `main` also a Release) | 2026-09-23 |
 | .github/workflows/desktop.yml | CI build of desktop in a Manjaro container (artifact; on `main` also a Release) | 2026-09-23 |
+| desktop/auto-update.sh | daily timer (`--enable`) that runs `install.sh --release` and notifies on change | 2026-10-25 |
+| .github/workflows/upstream.yml | daily: bump a pin to newer upstream on `upstream/*`, built and released when green | 2026-10-25 |
+| .github/pkgbuild-recipe.sh | fingerprint of the Arch PKGBUILD recipe, so desktop bumps only when build.sh still matches | 2026-10-25 |
 | .github/release.sh | publishes a CI build as a GitHub Release (files, SHA-256, patch list) | 2026-09-26 |
 | .github/announce.sh | posts a Release to the Telegram channel (file or link, changelog); skips without secrets | 2026-10-24 |
 | .github/workflows/announce.yml | manual re-post of the newest release: checks the bot secrets without a build | 2026-10-24 |

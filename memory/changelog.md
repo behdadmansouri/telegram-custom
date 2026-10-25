@@ -7,3 +7,5 @@
 - 2026-10-24: desktop builds on GitHub only; every `main` build publishes a Release, installed or updated with `desktop/install.sh --release` (provenance-checked).
 - 2026-10-24: releases post to a Telegram channel (file or link + what changed), via `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHANNEL_ID`; manual **announce** workflow to test the bot.
 - 2026-10-24: first desktop Release (desktop-v7.2.5-b7) installed via `install.sh --release`; local source/build cache (6.7 GB) deleted.
+- 2026-10-25: daily automatic upstream bumps (Android: DrKLO `update to X`; desktop: Manjaro stable's version when the Arch recipe is unchanged), released when they build, an issue when not.
+- 2026-10-25: `desktop/auto-update.sh --enable` sets up a daily laptop update with notifications; phone updates through Obtainium.

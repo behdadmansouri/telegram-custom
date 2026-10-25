@@ -1,0 +1,97 @@
+name: upstream
+
+# Daily: has upstream moved past our pin? Commit the bump to a branch
+# upstream/<platform>-<version> and build it there (android.yml / desktop.yml
+# release it and fast-forward main when green, open an issue when red).
+# One bump at a time: while any upstream/* branch is unresolved, wait.
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write    # push the bump branch
+  actions: write     # start the build on it
+  issues: write      # a desktop recipe change needs a hand port
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      busy: ${{ steps.busy.outputs.busy }}
+    steps:
+      - id: busy
+        run: |
+          open=$(gh api "repos/$GH_REPO/branches?per_page=100" -q '.[].name' | grep '^upstream/' || true)
+          echo "busy=$([[ -n $open ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          [[ -z $open ]] || echo "::notice::waiting on: $open (merged branches are deleted; a failed one has an issue)"
+
+  android:
+    needs: check
+    if: needs.check.outputs.busy == 'false'
+    runs-on: ubuntu-latest
+    outputs:
+      bumped: ${{ steps.bump.outputs.bumped }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: bump
+        run: |
+          pin=$(grep -v '^#' android/UPSTREAM | head -1)
+          read -r sha date msg < <(gh api 'repos/DrKLO/Telegram/commits?per_page=50' \
+              -q '.[] | select(.commit.message | test("^update to ")) | "\(.sha) \(.commit.committer.date[:10]) \(.commit.message | split("\n")[0])"' | head -1)
+          [[ -n ${sha:-} ]] || { echo "::warning::no 'update to' commit among DrKLO's last 50"; exit 0; }
+          status=$(gh api "repos/DrKLO/Telegram/compare/$pin...$sha" -q .status)
+          [[ $status == ahead ]] || { echo "android up to date ($msg, $status)"; exit 0; }
+          ver=${msg#update to }; ver=${ver%% *}
+          sed -i "1s/.*/$sha/; 2s/\"update to [^\"]*\", [0-9-]*/\"$msg\", $date/" android/UPSTREAM
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -qam "android: upstream $msg"
+          git push -q origin "HEAD:refs/heads/upstream/android-$ver"
+          gh workflow run android.yml --ref "upstream/android-$ver"
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::android $pin -> $sha ($msg), building upstream/android-$ver"
+
+  desktop:
+    needs: [check, android]
+    # one bump per day: only when android had nothing to do
+    if: needs.check.outputs.busy == 'false' && needs.android.outputs.bumped != 'true'
+    runs-on: ubuntu-latest
+    container: manjarolinux/base:latest
+    steps:
+      - name: Tools
+        run: |
+          pacman-key --init > /dev/null && pacman-key --populate archlinux manjaro > /dev/null
+          pacman -Sy --noconfirm --needed git github-cli > /dev/null
+      - uses: actions/checkout@v4
+      - name: Bump to Manjaro stable's version
+        run: |
+          git config --global --add safe.directory '*'
+          source desktop/UPSTREAM
+          full=$(pacman -Si telegram-desktop | awk '/^Version/ {print $3}')   # e.g. 7.2.5-1
+          ver=${full%-*}; ver=${ver#*:}
+          if [[ $(vercmp "$ver" "$TDESKTOP_VERSION") -le 0 ]]; then
+              echo "desktop up to date: Manjaro stable has $full, pin $TDESKTOP_VERSION"; exit 0
+          fi
+          git clone -q --depth 1 --branch "${full/:/-}" \
+              https://gitlab.archlinux.org/archlinux/packaging/packages/telegram-desktop.git /tmp/arch
+          read -r pkgver td sha fp < <(.github/pkgbuild-recipe.sh /tmp/arch/PKGBUILD)
+          if [[ $fp != "$PKGBUILD_RECIPE" ]]; then
+              title="Desktop $pkgver: the Arch build recipe changed, port desktop/build.sh by hand"
+              if gh issue list --state open --search "in:title \"$title\"" --json number -q '.[0].number' | grep -q .; then
+                  echo "::notice::recipe change already reported"; exit 0
+              fi
+              gh issue create --title "$title" --body "Manjaro stable now ships telegram-desktop $full. Its PKGBUILD's dependencies, sources or build steps differ from the recipe \`desktop/build.sh\` mirrors (fingerprint $fp, ours $PKGBUILD_RECIPE), so no automatic bump. PKGBUILD: https://gitlab.archlinux.org/archlinux/packaging/packages/telegram-desktop/-/blob/${full/:/-}/PKGBUILD. After porting, set \`PKGBUILD_RECIPE=$fp\` in desktop/UPSTREAM."
+              exit 0
+          fi
+          sed -i "s/^TDESKTOP_VERSION=.*/TDESKTOP_VERSION=$pkgver/; s/^TDESKTOP_SHA512=.*/TDESKTOP_SHA512=$sha/; s/^TD_COMMIT=.*/TD_COMMIT=$td/" desktop/UPSTREAM
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -qam "desktop: upstream $pkgver (Manjaro stable $full)"
+          git push -q origin "HEAD:refs/heads/upstream/desktop-$pkgver"
+          gh workflow run desktop.yml --ref "upstream/desktop-$pkgver"
+          echo "::notice::desktop $TDESKTOP_VERSION -> $pkgver, building upstream/desktop-$pkgver"
