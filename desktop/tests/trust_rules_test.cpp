@@ -112,6 +112,17 @@ int main() {
 	Expect(Decide(Chat(Kind::Channel), s) == Why::Untrusted, "stranger channel");
 	Expect(Decide(Person(), s) == Why::Untrusted, "stranger");
 
+	// User kinds: only 777000 is the service account (tdesktop's
+	// isServiceUser() also matches any id divisible by 1000)
+	Expect(UserKind(false, 777000, false) == Kind::Service, "777000 is service");
+	Expect(UserKind(false, 123456000, false) == Kind::Person,
+		"round id is a person");
+	Expect(UserKind(false, 123456000, true) == Kind::Bot, "round-id bot");
+	auto round = Person(0);
+	round.kind = UserKind(false, 123456000, false);
+	Expect(Decide(round, s) == Why::Untrusted, "round-id stranger untrusted");
+	Expect(UserKind(true, 123456000, false) == Kind::Self, "self");
+
 	if (failures) {
 		std::printf("%d failure(s)\n", failures);
 		return 1;
