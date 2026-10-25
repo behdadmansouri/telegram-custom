@@ -70,3 +70,6 @@ New gap from 12: a file or video bubble whose thumbnail was skipped while untrus
 
 | Round | Run | Result |
 |---|---|---|
+| 3 | 40168432808 | green first try: guard (121 pattern/file pairs), rule tests, build |
+
+New guard rows read and classified: `loadVideoThumbnail(` in reactions (effects, not chat media) and the gated Gif/Sticker sites; `VideoPreload` in sponsored messages (removed by 0001), stories (behind D7) and the slideshow (now gated); `videoThumbnailWanted(` in boxes, inline-bot results, media preview and main menu (opened or own surfaces) and the slideshow preload (gated); `webFileLoader` in `inline_bot_downloads` (a download you start) and the image path (behind D6).
