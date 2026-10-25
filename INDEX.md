@@ -24,4 +24,7 @@
 | .github/announce.sh | posts a Release to the Telegram channel (file or link, changelog); skips without secrets | 2026-10-24 |
 | .github/workflows/announce.yml | manual re-post of the newest release: checks the bot secrets without a build | 2026-10-24 |
 | .github/patch-lint.sh | fails if a patch adds a URL, network code, a permission or a dependency | 2026-09-26 |
+| .github/media-callers.sh | trust-model caller guard: fails CI on a new upstream caller file of a gated media function, warns on count changes (`update` after reading new callers) | 2026-10-25 |
+| .github/media-callers.txt | its table: platform, pattern, file, count on stock upstream | 2026-10-25 |
+| desktop/tests/trust_rules_test.cpp | unit test of the desktop trust rule table, run by CI against the patched tree | 2026-10-25 |
 | .github/workflows/patch-lint.yml | runs patch-lint on every push (README badge) | 2026-09-26 |
