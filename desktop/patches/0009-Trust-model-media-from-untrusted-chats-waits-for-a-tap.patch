@@ -20,7 +20,7 @@ settings under Advanced -> Automatic media download -> Media trust.
  Telegram/CMakeLists.txt                       |   3 +
  Telegram/SourceFiles/calls/calls_call.cpp     |  18 +-
  .../SourceFiles/custom/custom_settings.cpp    |   5 +
- Telegram/SourceFiles/custom/custom_trust.cpp  | 591 ++++++++++++++++++
+ Telegram/SourceFiles/custom/custom_trust.cpp  | 604 ++++++++++++++++++
  Telegram/SourceFiles/custom/custom_trust.h    |  79 +++
  .../SourceFiles/custom/custom_trust_rules.h   |  99 +++
  .../SourceFiles/data/data_auto_download.cpp   |  13 +
@@ -36,7 +36,7 @@ settings under Advanced -> Automatic media download -> Media trust.
  .../settings/sections/settings_advanced.cpp   |  11 +
  .../ui/image/image_location_factory.cpp       |   4 +
  .../SourceFiles/window/window_peer_menu.cpp   |  14 +
- 19 files changed, 873 insertions(+), 6 deletions(-)
+ 19 files changed, 886 insertions(+), 6 deletions(-)
  create mode 100644 Telegram/SourceFiles/custom/custom_trust.cpp
  create mode 100644 Telegram/SourceFiles/custom/custom_trust.h
  create mode 100644 Telegram/SourceFiles/custom/custom_trust_rules.h
@@ -138,10 +138,10 @@ index 425da95c..21469a44 100644
  
 diff --git a/Telegram/SourceFiles/custom/custom_trust.cpp b/Telegram/SourceFiles/custom/custom_trust.cpp
 new file mode 100644
-index 00000000..79617aee
+index 00000000..8180bb05
 --- /dev/null
 +++ b/Telegram/SourceFiles/custom/custom_trust.cpp
-@@ -0,0 +1,591 @@
+@@ -0,0 +1,604 @@
 +// telegram-custom: see custom_trust.h.
 +#include "custom/custom_trust.h"
 +
@@ -169,6 +169,9 @@ index 00000000..79617aee
 +#include "ui/widgets/checkbox.h"
 +#include "ui/widgets/fields/number_input.h"
 +#include "ui/widgets/labels.h"
++#include "ui/wrap/padding_wrap.h"
++#include "ui/qt_object_factory.h"
++#include "ui/ui_utility.h"
 +#include "window/window_controller.h"
 +#include "window/window_session_controller.h"
 +#include "styles/style_layers.h"
@@ -689,12 +692,22 @@ index 00000000..79617aee
 +	};
 +	const auto number = [&](const QString &label, int value, int max) {
 +		box->addRow(object_ptr<Ui::FlatLabel>(box, label, st::boxLabel));
-+		return box->addRow(object_ptr<Ui::NumberInput>(
++		// NumberInput is a QLineEdit, not an RpWidget: wrap it for addRow.
++		const auto wrap = box->addRow(object_ptr<Ui::FixedHeightWidget>(
 +			box,
++			st::defaultInputField.heightMin));
++		const auto field = Ui::CreateChild<Ui::NumberInput>(
++			wrap,
 +			st::defaultInputField,
 +			rpl::single(QString()),
 +			QString::number(value),
-+			max));
++			max);
++		wrap->widthValue() | rpl::on_next([=](int width) {
++			field->move(0, 0);
++			field->resize(width, field->height());
++			wrap->resize(width, field->height());
++		}, wrap->lifetime());
++		return field;
 +	};
 +	const auto on = check(u"Trust model on"_q, s.on);
 +	const auto tap = check(u"Untrusted chats: tap to load"_q, s.tap);
