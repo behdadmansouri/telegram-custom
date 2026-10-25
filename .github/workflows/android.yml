@@ -44,6 +44,13 @@ jobs:
           path: tg
           submodules: recursive
 
+      # Trust model guard (docs/trust.md 4.1, C1): upstream calling a gated
+      # media function from a new file, or dropping a hooked one, fails here
+      # before the long build. Counted on the stock checkout (HEAD), so our
+      # own patches never count.
+      - name: Media caller guard
+        run: bash custom/.github/media-callers.sh check android tg HEAD
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -69,6 +76,13 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bash custom/android/customize.sh tg
+
+      # The trust rule table (C2): plain javac of the patched TrustRules.java,
+      # no Android SDK needed.
+      - name: Trust rule tests
+        run: |
+          javac -d /tmp/trust-test tg/TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java custom/android/tests/TrustRulesTest.java
+          java -cp /tmp/trust-test TrustRulesTest
 
       - uses: actions/cache@v4
         with:

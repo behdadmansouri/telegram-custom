@@ -1,0 +1,254 @@
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java	4
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	2
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	9
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java	2
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java	1
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/PopupNotificationActivity.java	2
+android	canDownloadMedia(	TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java	1
+android	canDownloadMediaType(	TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java	2
+android	canDownloadMediaType(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	1
+android	canPreloadStories(	TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java	5
+android	canPreloadStories(	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java	1
+android	computeAutoDownload(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	5
+android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java	3
+android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	2
+android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/ui/Adapters/DialogsAdapter.java	1
+android	getCurrentDownloadMask(	TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Business/LocationActivity.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Business/ProfileLocationCell.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	3
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ContextLinkCell.java	2
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Cells/PaymentInfoCell.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/attached/PollAttachedMediaLocation.java	2
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/buttons/PollButtonDrawable.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/PollContentDrawable.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java	2
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/iv/RichMapCell.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java	4
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/PinchToZoomHelper.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/PopupNotificationActivity.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsIntroActivity.java	5
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/CollectibleCell.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/GramWalletTonConnect.java	5
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/TransactionCell.java	1
+android	getForWebFile(	TMessagesProj/src/main/java/org/telegram/ui/Wallet/WalletTonConnectSessionsFragment.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/ChatThemeController.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/MediaDataController.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/MusicPlayerService.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java	6
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ActionBar/EmojiThemes.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ArticleViewer.java	5
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/AvatarSpan.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/bots/BotLocation.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/bots/SetupEmojiStatusSheet.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Business/LocationActivity.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Business/ProfileLocationCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Business/QuickRepliesActivity.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/CalendarActivity.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/AnimatedStatusView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/BotHelpCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChannelRecommendationsCell.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatActionCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java	7
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ContextLinkCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogMeUrlCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/GroupMedia.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/ProfileSearchCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedLinkCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/SharedPhotoVideoCell2.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/StickerEmojiCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Cells/TextCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ChatBackgroundDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ChatPullingDownDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/AnimatedEmojiDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/AttachBotIntroTopView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/AvatarsDrawable.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/AvatarsListDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/BackupImageView.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayout.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/ChatAttachAlertPhotoLayoutPreview.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/conference/message/GroupCallMessageCell.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/EditCoverButton.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiPacksAlert.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Forum/MessageTopicButton.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/GroupCreateSpan.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/GroupedPhotosListView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/ImageUpdater.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/MotionBackgroundDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LinkPreview.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/LocationMarker.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/PhotoView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Paint/Views/StickerView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/PhotoCropView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/attached/PollAttachedMediaLocation.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/buttons/PollButtonDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/PollAttachedMedia.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/poll/PollContentDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/boosts/cells/msg/GiveawayMessageCell.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/boosts/cells/msg/GiveawayResultsMessageCell.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/PremiumStickersPreviewRecycler.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/ReactionDrawingObject.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Premium/VideoScreenPreview.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/quickforward/QuickShareAvatarCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/RadialProgress2.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/AnimatedEmojiEffect.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/ReactionsContainerLayout.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionImageHolder.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsEffectOverlay.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/Reactions/ReactionsLayoutInBubble.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/RLottieImageView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/SenderSelectView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/SimpleAvatarView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/StorageDiagramView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/TextPaintImageReceiverSpan.java	4
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/ThemeSmallPreviewView.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/TopicSeparator.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/VectorAvatarThumbDrawable.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/VideoSeekPreviewImage.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/voip/GroupCallMiniTextureView.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Components/WebPlayerView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ContentPreviewViewer.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/DownloadProgressIcon.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/EmojiAnimationsOverlay.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Gifts/GiftMessageDrawable.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/GroupCallActivity.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ImageReceiverSpan.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/iv/RichDocumentCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/iv/RichMapCell.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/iv/RichMediaItem.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/LocationActivity.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/MessageStatisticActivity.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/PeerColorActivity.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/PhotoViewer.java	3
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/PinchToZoomHelper.java	5
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity2.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/ProfileActivity.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/SecretMediaViewer.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/SelectAnimatedEmojiDialog.java	6
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stars/StarGiftSheet.java	7
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stars/StarGiftUniqueActionLayout.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stars/StarsReactionsSheet.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/DialogStoriesCell.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/PaidReactionButton.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/PeerStoriesView.java	5
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/ProfileStoriesView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/AlbumButton.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/CollageLayoutView2.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/EmojiBottomSheet.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/MultipleStoriesSelector.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/RecordControl.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/recorder/ScannedLinkPreview.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/SelfStoriesPreviewView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesLikeButton.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesUtilities.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoryReactionWidgetView.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/SuggestUserPhotoView.java	2
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/TextureViewContainer.java	1
+android	new ImageReceiver(	TMessagesProj/src/main/java/org/telegram/ui/web/BotWebViewContainer.java	1
+android	preloadStory(	TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java	6
+android	udp_p2p	TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java	3
+android	udp_p2p	TMessagesProj/src/main/java/org/telegram/tgnet/tl/TL_phone.java	5
+desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/history/admin_log/history_admin_log_inner.cpp	1
+desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/history/history_inner_widget.cpp	1
+desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/history/view/history_view_context_menu.cpp	1
+desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/history/view/media/history_view_gif.cpp	1
+desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/history/view/media/history_view_photo.cpp	1
+desktop	AutoDownload::ShouldAutoPlay(	Telegram/SourceFiles/iv/markdown/iv_markdown_history_view_media.cpp	1
+desktop	AutoDownload::Should(	Telegram/SourceFiles/data/data_document_media.cpp	2
+desktop	AutoDownload::Should(	Telegram/SourceFiles/data/data_media_preload.cpp	1
+desktop	AutoDownload::Should(	Telegram/SourceFiles/data/data_photo_media.cpp	2
+desktop	autoLoadThumbnailAllowed(	Telegram/SourceFiles/data/data_media_types.cpp	1
+desktop	autoLoadThumbnailAllowed(	Telegram/SourceFiles/data/data_photo_media.cpp	1
+desktop	autoLoadThumbnailAllowed(	Telegram/SourceFiles/data/data_photo_media.h	1
+desktop	autoLoadThumbnailAllowed(	Telegram/SourceFiles/data/data_reply_preview.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/boxes/create_ai_tone_box.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/boxes/reactions_settings_box.cpp	2
+desktop	checkStickerLarge(	Telegram/SourceFiles/boxes/star_gift_box.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/boxes/star_gift_preview_box.cpp	2
+desktop	checkStickerLarge(	Telegram/SourceFiles/boxes/sticker_creator_box.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/chat_helpers/emoji_interactions.cpp	4
+desktop	checkStickerLarge(	Telegram/SourceFiles/data/data_document.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/data/data_document_media.cpp	4
+desktop	checkStickerLarge(	Telegram/SourceFiles/data/data_document_media.h	2
+desktop	checkStickerLarge(	Telegram/SourceFiles/data/data_message_reactions.cpp	7
+desktop	checkStickerLarge(	Telegram/SourceFiles/data/stickers/data_custom_emoji.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/history/view/media/history_view_sticker.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/history/view/reactions/history_view_reactions_selector.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/history/view/reactions/history_view_reactions_strip.cpp	4
+desktop	checkStickerLarge(	Telegram/SourceFiles/info/peer_gifts/info_peer_gifts_common.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/info/profile/info_profile_birthday_effect.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/info/profile/info_profile_cover.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/info/userpic/info_userpic_emoji_builder_menu_item.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/info/userpic/info_userpic_emoji_builder_preview.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/media/stories/media_stories_reactions.cpp	2
+desktop	checkStickerLarge(	Telegram/SourceFiles/settings/business/settings_chat_intro.cpp	1
+desktop	checkStickerLarge(	Telegram/SourceFiles/settings/sections/settings_premium.cpp	1
+desktop	f_udp_p2p	Telegram/SourceFiles/calls/calls_call.cpp	3
+desktop	loadThumbnail(	Telegram/SourceFiles/boxes/stickers_box.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/chat_helpers/stickers_list_footer.cpp	3
+desktop	loadThumbnail(	Telegram/SourceFiles/data/data_document.cpp	3
+desktop	loadThumbnail(	Telegram/SourceFiles/data/data_document.h	1
+desktop	loadThumbnail(	Telegram/SourceFiles/data/data_document_media.cpp	2
+desktop	loadThumbnail(	Telegram/SourceFiles/data/data_media_types.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/data/data_wall_paper.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/data/stickers/data_stickers_set.cpp	2
+desktop	loadThumbnail(	Telegram/SourceFiles/data/stickers/data_stickers_set.h	1
+desktop	loadThumbnail(	Telegram/SourceFiles/history/view/controls/history_view_compose_media_edit_manager.cpp	2
+desktop	loadThumbnail(	Telegram/SourceFiles/history/view/media/history_view_document.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/history/view/media/history_view_gif.cpp	2
+desktop	loadThumbnail(	Telegram/SourceFiles/history/view/media/history_view_sticker.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/history/view/media/history_view_theme_document.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/inline_bots/inline_bot_layout_internal.cpp	2
+desktop	loadThumbnail(	Telegram/SourceFiles/inline_bots/inline_bot_layout_item.cpp	2
+desktop	loadThumbnail(	Telegram/SourceFiles/media/view/media_view_overlay_widget.cpp	1
+desktop	loadThumbnail(	Telegram/SourceFiles/overview/overview_layout.cpp	5
+desktop	loadThumbnail(	Telegram/SourceFiles/payments/payments_form.cpp	5
+desktop	loadThumbnail(	Telegram/SourceFiles/payments/payments_form.h	1
+desktop	loadThumbnail(	Telegram/SourceFiles/ui/effects/credits_graphics.cpp	1
+desktop	PlainUrlLocation	Telegram/SourceFiles/storage/file_download.cpp	1
+desktop	PlainUrlLocation	Telegram/SourceFiles/ui/image/image_location.cpp	6
+desktop	PlainUrlLocation	Telegram/SourceFiles/ui/image/image_location_factory.cpp	1
+desktop	PlainUrlLocation	Telegram/SourceFiles/ui/image/image_location.h	15
+desktop	startPreloading(	Telegram/SourceFiles/data/data_stories.cpp	2
+desktop	startPreloading(	Telegram/SourceFiles/data/data_stories.h	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/boxes/background_box.cpp	2
+desktop	thumbnailWanted(	Telegram/SourceFiles/boxes/background_preview_box.cpp	2
+desktop	thumbnailWanted(	Telegram/SourceFiles/boxes/send_gif_with_caption_box.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/boxes/stickers_box.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/chat_helpers/stickers_list_footer.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/chat_helpers/stickers_list_widget.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/data/data_document_media.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/data/data_document_media.h	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/data/data_download_manager.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/data/data_reply_preview.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/history/view/media/history_view_document.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/history/view/media/history_view_gif.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/history/view/media/history_view_sticker.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/history/view/media/history_view_theme_document.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/history/view/media/menu/history_view_poll_menu.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/info/statistics/info_statistics_recent_message.cpp	2
+desktop	thumbnailWanted(	Telegram/SourceFiles/inline_bots/inline_bot_layout_internal.cpp	3
+desktop	thumbnailWanted(	Telegram/SourceFiles/iv/iv_cached_media.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/iv/markdown/iv_markdown_history_view_media.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/mainwidget.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/media/system_media_controls_manager.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/media/view/media_view_group_thumbs.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/media/view/media_view_overlay_widget.cpp	2
+desktop	thumbnailWanted(	Telegram/SourceFiles/overview/overview_layout.cpp	4
+desktop	thumbnailWanted(	Telegram/SourceFiles/settings/settings_credits_graphics.cpp	2
+desktop	thumbnailWanted(	Telegram/SourceFiles/ui/chat/attach/attach_item_single_file_preview.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/ui/chat/attach/attach_item_single_media_preview.cpp	1
+desktop	thumbnailWanted(	Telegram/SourceFiles/ui/dynamic_thumbnails.cpp	2
+desktop	thumbnailWanted(	Telegram/SourceFiles/window/window_media_preview.cpp	1

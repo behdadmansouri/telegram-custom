@@ -1,0 +1,1295 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: telegram-custom <telegram-custom@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 02:26:17 -0400
+Subject: [PATCH] Media trust: media from untrusted chats waits for a tap
+
+docs/trust.md Android v1. A chat is trusted when it is Saved Messages or
+777000, marked by hand (people: 90-day grace, then by activity), a group you
+created or a channel you run, or an active contact (3 days in 90 that they
+wrote to you in private, logged on this device in tc_activity). Your own
+non-forwarded messages always load; "Never trust" beats everything.
+
+Untrusted, with tap to load on: no auto-download (DownloadController
+funnels, story preload, rich messages, chat-list thumbnails), and one gate
+in ImageReceiver.setImage for cells, the chat list and the pinned/reply bars
+keeps only the embedded blurred thumbnail; animated and video stickers stay
+still (dice and animated emoji excepted). The first tap on such a message
+unlocks it for the session and rebinds the cell. Direct-URL web documents
+never load while the model is on. Calls with untrusted users are relay-only.
+
+Chat menu item with state-first labels, a once-per-chat toast "Media here
+waits for a tap / Trust this chat", Settings -> Media trust (nine rows).
+Rules are pure (TrustRules) and unit-tested by CI with plain javac.
+---
+ .../messenger/DownloadController.java         |   5 +
+ .../org/telegram/messenger/ImageLocation.java |   3 +
+ .../org/telegram/messenger/ImageReceiver.java |   8 +
+ .../telegram/messenger/MessagesStorage.java   |   2 +
+ .../telegram/messenger/RichMessageLayout.java |   3 +
+ .../telegram/messenger/TrustController.java   | 741 ++++++++++++++++++
+ .../org/telegram/messenger/TrustRules.java    | 123 +++
+ .../telegram/messenger/voip/VoIPService.java  |  10 +-
+ .../telegram/ui/Cells/ChatMessageCell.java    |   5 +
+ .../org/telegram/ui/Cells/DialogCell.java     |   2 +-
+ .../java/org/telegram/ui/ChatActivity.java    |   6 +
+ .../org/telegram/ui/SettingsActivity.java     |   4 +
+ .../ui/Stories/StoriesController.java         |   3 +
+ .../telegram/ui/TrustSettingsActivity.java    | 105 +++
+ 14 files changed, 1015 insertions(+), 5 deletions(-)
+ create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
+ create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java
+ create mode 100644 TMessagesProj/src/main/java/org/telegram/ui/TrustSettingsActivity.java
+
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java b/TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java
+index 55de2fd4..d10f1930 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/DownloadController.java
+@@ -607,6 +607,7 @@ public class DownloadController extends BaseController implements NotificationCe
+     }
+ 
+     public boolean canDownloadMedia(MessageObject messageObject) {
++        if (!TrustController.getInstance(currentAccount).allows(messageObject)) return false; // telegram-custom: media trust
+         if (messageObject.type == MessageObject.TYPE_STORY) {
+             if (!SharedConfig.isAutoplayVideo()) return false;
+             TLRPC.TL_messageMediaStory mediaStory = (TLRPC.TL_messageMediaStory) MessageObject.getMedia(messageObject);
+@@ -650,6 +651,7 @@ public class DownloadController extends BaseController implements NotificationCe
+     }
+ 
+     public int canDownloadMediaType(MessageObject messageObject) {
++        if (!TrustController.getInstance(currentAccount).allows(messageObject)) return 0; // telegram-custom: media trust
+         if (messageObject.type == MessageObject.TYPE_STORY) {
+             if (!SharedConfig.isAutoplayVideo()) return 0;
+             TLRPC.TL_messageMediaStory mediaStory = (TLRPC.TL_messageMediaStory) MessageObject.getMedia(messageObject);
+@@ -668,6 +670,7 @@ public class DownloadController extends BaseController implements NotificationCe
+     }
+ 
+     public int canDownloadMediaType(MessageObject messageObject, long overrideSize) {
++        if (!TrustController.getInstance(currentAccount).allows(messageObject)) return 0; // telegram-custom: media trust
+         if (messageObject.type == MessageObject.TYPE_STORY) {
+             if (!SharedConfig.isAutoplayVideo()) return 0;
+             TLRPC.TL_messageMediaStory mediaStory = (TLRPC.TL_messageMediaStory) MessageObject.getMedia(messageObject);
+@@ -859,6 +862,7 @@ public class DownloadController extends BaseController implements NotificationCe
+     }
+ 
+     public int canDownloadMedia(TLRPC.Message message) {
++        if (!TrustController.getInstance(currentAccount).allows(message)) return 0; // telegram-custom: media trust
+         if (message == null || message.media instanceof TLRPC.TL_messageMediaStory) {
+             return canPreloadStories() ? 2 : 0;
+         }
+@@ -940,6 +944,7 @@ public class DownloadController extends BaseController implements NotificationCe
+     }
+ 
+     public int canDownloadMedia(TLRPC.Message message, TLRPC.MessageMedia media) {
++        if (!TrustController.getInstance(currentAccount).allows(message)) return 0; // telegram-custom: media trust
+         if (message == null || media instanceof TLRPC.TL_messageMediaStory) {
+             return canPreloadStories() ? 2 : 0;
+         }
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java
+index d32a2dc7..3fbf898b 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageLocation.java
+@@ -85,6 +85,9 @@ public class ImageLocation {
+         if (webFile == null) {
+             return null;
+         }
++        if (webFile.noproxy && TrustController.blockNoProxy()) { // telegram-custom: media trust: fetched from your own IP
++            return null;
++        }
+         ImageLocation imageLocation = new ImageLocation();
+         if (webFile.noproxy) {
+             imageLocation.path = webFile.url;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java b/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
+index 0a607423..878a6a50 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/ImageReceiver.java
+@@ -570,6 +570,14 @@ public class ImageReceiver implements NotificationCenter.NotificationCenterDeleg
+     }
+ 
+     public void setImage(ImageLocation mediaLocation, String mediaFilter, ImageLocation imageLocation, String imageFilter, ImageLocation thumbLocation, String thumbFilter, Drawable thumb, long size, String ext, Object parentObject, int cacheType) {
++        if (parentObject instanceof MessageObject && TrustController.gateActive()) { // telegram-custom: media trust
++            final ImageLocation[] trust = TrustController.filter(this, (MessageObject) parentObject, mediaLocation, imageLocation, thumbLocation);
++            if (trust != null) {
++                mediaLocation = trust[0];
++                imageLocation = trust[1];
++                thumbLocation = trust[2];
++            }
++        }
+         if (allowLoadingOnAttachedOnly && !attachedToWindow) {
+             if (setImageBackup == null) {
+                 setImageBackup = new SetImageBackup();
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+index 98e066ea..8dcfd3f2 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/MessagesStorage.java
+@@ -11861,6 +11861,7 @@ public class MessagesStorage extends BaseController {
+     }
+ 
+     private void putMessagesInternal(ArrayList<TLRPC.Message> messages, boolean withTransaction, boolean doNotUpdateDialogDate, int downloadMask, boolean ifNoLastMessage, int mode, long threadMessageId) {
++        TrustController.getInstance(currentAccount).noteIncoming(messages, mode); // telegram-custom: media trust
+         if (messages != null) {
+             ArrayList<TL_ephemeral.EphemeralMessage> ephemeralMessages = null;
+             for (TLRPC.Message message : messages) {
+@@ -16078,6 +16079,7 @@ public class MessagesStorage extends BaseController {
+     // put messages in data base while load history
+     public void putMessages(TLRPC.messages_Messages messages, long dialogId, int load_type, int max_id, boolean createDialog, int mode, long threadMessageId) {
+         storageQueue.postRunnable(() -> {
++            TrustController.getInstance(currentAccount).noteIncoming(messages.messages, mode); // telegram-custom: media trust
+             SQLitePreparedStatement state_messages = null;
+             SQLitePreparedStatement state_messages_topics = null;
+             SQLitePreparedStatement state_media = null;
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
+index ed4cc2b3..fdc41a47 100644
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/RichMessageLayout.java
+@@ -6685,6 +6685,7 @@ public class RichMessageLayout {
+         }
+ 
+         protected boolean computeAutoDownload() {
++            if (!TrustController.getInstance(root.currentAccount).allows(root.messageObject)) return false; // telegram-custom: media trust
+             return (DownloadController.getInstance(root.currentAccount).getCurrentDownloadMask() & DownloadController.AUTODOWNLOAD_TYPE_PHOTO) != 0;
+         }
+ 
+@@ -7212,6 +7213,7 @@ public class RichMessageLayout {
+ 
+         @Override
+         protected boolean computeAutoDownload() {
++            if (!TrustController.getInstance(root.currentAccount).allows(root.messageObject)) return false; // telegram-custom: media trust
+             if (document == null) return false;
+             return isVideo
+                 ? allowAutoplay() && DownloadController.getInstance(root.currentAccount).canDownloadMedia(DownloadController.AUTODOWNLOAD_TYPE_VIDEO, document.size)
+@@ -8142,6 +8144,7 @@ public class RichMessageLayout {
+         }
+ 
+         private boolean computeAutoDownload() {
++            if (!TrustController.getInstance(root.currentAccount).allows(root.messageObject)) return false; // telegram-custom: media trust
+             if (document != null) {
+                 return isVideo
+                     ? allowAutoplay() && DownloadController.getInstance(root.currentAccount).canDownloadMedia(DownloadController.AUTODOWNLOAD_TYPE_VIDEO, document.size)
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java b/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
+new file mode 100644
+index 00000000..210f8c1c
+--- /dev/null
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
+@@ -0,0 +1,741 @@
++package org.telegram.messenger;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++import android.os.Looper;
++import android.os.SystemClock;
++import android.util.LongSparseArray;
++import android.util.SparseBooleanArray;
++import android.view.View;
++
++import org.telegram.SQLite.SQLiteCursor;
++import org.telegram.SQLite.SQLiteDatabase;
++import org.telegram.SQLite.SQLitePreparedStatement;
++import org.telegram.tgnet.NativeByteBuffer;
++import org.telegram.tgnet.TLRPC;
++import org.telegram.ui.ActionBar.ActionBarMenuItem;
++import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
++import org.telegram.ui.ActionBar.BaseFragment;
++import org.telegram.ui.Cells.ChatMessageCell;
++import org.telegram.ui.Cells.DialogCell;
++import org.telegram.ui.ChatActivity;
++import org.telegram.ui.Components.BackupImageView;
++import org.telegram.ui.Components.BulletinFactory;
++import org.telegram.ui.Components.RecyclerListView;
++import org.telegram.ui.LaunchActivity;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.HashMap;
++import java.util.HashSet;
++import java.util.Set;
++import java.util.TimeZone;
++
++// telegram-custom: media trust (docs/trust.md). Media from chats you do not
++// trust waits for a tap: no auto-download, only the embedded blurred
++// thumbnail, nothing autoplays, animated stickers stay still, no story
++// preload, calls relay-only. The rules are TrustRules (pure, unit-tested);
++// this class feeds them per account: hand marks (prefs), contacts, chat
++// flags and per-person active days (own table tc_activity in the account's
++// cache database). Everything stays on this device.
++public class TrustController extends BaseController {
++
++    public static final int MENU_ID = 9100; // chat menu item, ChatActivity
++
++    private static final String PREFS = "telegram_custom"; // CustomSettings' file
++    private static final long VERDICT_TTL_MS = 60 * 1000L;
++    private static final long REFRESH_EVERY_MS = 6 * 60 * 60 * 1000L;
++
++    private static volatile TrustRules.Settings settings;
++
++    private static final TrustController[] Instance = new TrustController[UserConfig.MAX_ACCOUNT_COUNT];
++
++    public static TrustController getInstance(int num) {
++        TrustController localInstance = Instance[num];
++        if (localInstance == null) {
++            synchronized (TrustController.class) {
++                localInstance = Instance[num];
++                if (localInstance == null) {
++                    Instance[num] = localInstance = new TrustController(num);
++                }
++            }
++        }
++        return localInstance;
++    }
++
++    // Snapshots, replaced whole (never mutated after publishing).
++    private volatile HashMap<Long, long[]> marks; // key -> {state, markedAt}; null until loaded
++    private volatile LongSparseArray<Integer> activeDays = new LongSparseArray<>(); // user id -> days in window
++    private volatile long refreshedAt = -REFRESH_EVERY_MS - 1;
++    private boolean refreshQueued; // storage queue only
++    private LongSparseArray<SparseBooleanArray> logged = new LongSparseArray<>(); // storage queue only: uid -> days in tc_activity
++    private volatile long userId; // whose marks and activity the snapshots hold
++
++    private final LongSparseArray<Integer> verdicts = new LongSparseArray<>(); // guarded by itself
++    private long verdictsAt;
++    private final LongSparseArray<SparseBooleanArray> tapped = new LongSparseArray<>(); // guarded by itself
++    private final HashSet<Long> toasted = new HashSet<>(); // guarded by itself
++
++    public TrustController(int num) {
++        super(num);
++    }
++
++    // ---- settings (global, one set for all accounts) ----
++
++    private static SharedPreferences prefs() {
++        return ApplicationLoader.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
++    }
++
++    public static TrustRules.Settings settings() {
++        TrustRules.Settings s = settings;
++        if (s == null) {
++            final SharedPreferences p = prefs();
++            s = new TrustRules.Settings();
++            s.on = p.getBoolean("trust_on", s.on);
++            s.n = TrustRules.clamp(p.getInt("trust_n", s.n), 1, 30);
++            s.d = TrustRules.clamp(p.getInt("trust_d", s.d), 7, 365);
++            s.grace = TrustRules.clamp(p.getInt("trust_grace", s.grace), 0, 365);
++            s.admin = p.getBoolean("trust_admin", s.admin);
++            s.contacts = p.getBoolean("trust_contacts", s.contacts);
++            s.sender = p.getBoolean("trust_sender", s.sender);
++            s.tap = p.getBoolean("trust_tap", s.tap);
++            s.relay = p.getBoolean("trust_relay", s.relay);
++            settings = s;
++        }
++        return s;
++    }
++
++    public static void saveSettings(TrustRules.Settings s) {
++        prefs().edit()
++            .putBoolean("trust_on", s.on)
++            .putInt("trust_n", s.n)
++            .putInt("trust_d", s.d)
++            .putInt("trust_grace", s.grace)
++            .putBoolean("trust_admin", s.admin)
++            .putBoolean("trust_contacts", s.contacts)
++            .putBoolean("trust_sender", s.sender)
++            .putBoolean("trust_tap", s.tap)
++            .putBoolean("trust_relay", s.relay)
++            .apply();
++        settings = s;
++        for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
++            final TrustController tc = Instance[a];
++            if (tc != null) {
++                tc.clearVerdicts();
++                tc.queueRefresh(0);
++            }
++        }
++    }
++
++    public static TrustRules.Settings copySettings() {
++        final TrustRules.Settings s = settings();
++        final TrustRules.Settings c = new TrustRules.Settings();
++        c.on = s.on;
++        c.n = s.n;
++        c.d = s.d;
++        c.grace = s.grace;
++        c.admin = s.admin;
++        c.contacts = s.contacts;
++        c.sender = s.sender;
++        c.tap = s.tap;
++        c.relay = s.relay;
++        return c;
++    }
++
++    public static String summary() {
++        final TrustRules.Settings s = settings();
++        return s.on ? "On · " + s.n + " days in " + s.d : "Off";
++    }
++
++    // Tap to load is the gate every media hook checks.
++    public static boolean gateActive() {
++        final TrustRules.Settings s = settings();
++        return s.on && s.tap;
++    }
++
++    // Direct-URL web documents (fetched from your own IP) never load while
++    // the model is on, in any chat (no chat context where they are built).
++    public static boolean blockNoProxy() {
++        return settings().on;
++    }
++
++    // ---- marks (per account, keyed by the account's user id) ----
++
++    private String marksKey() {
++        return "trust_marks_" + getUserConfig().getClientUserId();
++    }
++
++    private HashMap<Long, long[]> marks() {
++        HashMap<Long, long[]> m = marks;
++        if (m == null) {
++            m = new HashMap<>();
++            for (String entry : prefs().getStringSet(marksKey(), Collections.emptySet())) {
++                final String[] parts = entry.split(":");
++                if (parts.length != 3) {
++                    continue; // kept as is in prefs: setMark only rewrites its own key
++                }
++                try {
++                    m.put(Long.parseLong(parts[0]), new long[]{Long.parseLong(parts[1]), Long.parseLong(parts[2])});
++                } catch (NumberFormatException ignore) {
++                }
++            }
++            marks = m;
++        }
++        return m;
++    }
++
++    // Secret chats take the peer user's trust.
++    private long trustKey(long dialogId) {
++        if (DialogObject.isEncryptedDialog(dialogId)) {
++            final TLRPC.EncryptedChat chat = getMessagesController().getEncryptedChat(DialogObject.getEncryptedChatId(dialogId));
++            return chat != null ? chat.user_id : 0;
++        }
++        return dialogId;
++    }
++
++    public void setMark(long dialogId, int state) {
++        final long key = trustKey(dialogId);
++        if (key == 0) {
++            return;
++        }
++        final long now = System.currentTimeMillis() / 1000;
++        final String prefix = key + ":";
++        final Set<String> next = new HashSet<>();
++        for (String entry : prefs().getStringSet(marksKey(), Collections.emptySet())) {
++            if (!entry.startsWith(prefix)) {
++                next.add(entry); // other marks, unparseable ones included, survive
++            }
++        }
++        final HashMap<Long, long[]> m = new HashMap<>(marks());
++        if (state == TrustRules.MARK_NONE) {
++            m.remove(key);
++        } else {
++            next.add(key + ":" + state + ":" + now);
++            m.put(key, new long[]{state, now});
++        }
++        prefs().edit().putStringSet(marksKey(), next).apply();
++        marks = m;
++        clearVerdicts();
++        AndroidUtilities.runOnUIThread(() -> rebindOpenChat(dialogId));
++    }
++
++    // ---- verdicts ----
++
++    private void clearVerdicts() {
++        synchronized (verdicts) {
++            verdicts.clear();
++            verdictsAt = SystemClock.elapsedRealtime();
++        }
++    }
++
++    public int verdict(long dialogId) {
++        final TrustRules.Settings s = settings();
++        if (!s.on) {
++            return TrustRules.WHY_OFF;
++        }
++        final long now = SystemClock.elapsedRealtime();
++        final long self = getUserConfig().getClientUserId();
++        if (self != userId) {
++            // first use, or another login in this account slot
++            userId = self;
++            marks = null;
++            activeDays = new LongSparseArray<>();
++            synchronized (toasted) {
++                toasted.clear();
++            }
++            clearVerdicts();
++            refreshedAt = now;
++            queueRefresh(0);
++        } else if (now - refreshedAt > REFRESH_EVERY_MS) {
++            refreshedAt = now;
++            queueRefresh(0);
++        }
++        final long key = trustKey(dialogId);
++        if (key == 0) {
++            return TrustRules.WHY_UNTRUSTED;
++        }
++        synchronized (verdicts) {
++            if (now - verdictsAt > VERDICT_TTL_MS) {
++                verdicts.clear();
++                verdictsAt = now;
++            }
++            final Integer cached = verdicts.get(key);
++            if (cached != null) {
++                return cached;
++            }
++        }
++        final int why = compute(key, s);
++        synchronized (verdicts) {
++            verdicts.put(key, why);
++        }
++        return why;
++    }
++
++    private int compute(long key, TrustRules.Settings s) {
++        int kind;
++        boolean creatorOrAdmin = false;
++        boolean contact = false;
++        if (key > 0) {
++            final TLRPC.User user = getMessagesController().getUser(key);
++            if (key == getUserConfig().getClientUserId()) {
++                kind = TrustRules.KIND_SELF;
++            } else if (key == TrustRules.SERVICE_USER_ID) {
++                kind = TrustRules.KIND_SERVICE;
++            } else if (user != null && user.bot) {
++                kind = TrustRules.KIND_BOT;
++            } else {
++                kind = TrustRules.KIND_PERSON;
++                contact = user != null && user.contact || getContactsController().contactsDict.containsKey(key);
++            }
++        } else {
++            final TLRPC.Chat chat = getMessagesController().getChat(-key);
++            final boolean broadcast = chat != null && ChatObject.isChannelAndNotMegaGroup(chat);
++            kind = broadcast ? TrustRules.KIND_CHANNEL : TrustRules.KIND_GROUP;
++            creatorOrAdmin = chat != null && (chat.creator || broadcast && ChatObject.hasAdminRights(chat));
++        }
++        final long[] mark = marks().get(key);
++        final Integer days = activeDays.get(key);
++        return TrustRules.decide(kind, creatorOrAdmin, contact,
++            mark == null ? TrustRules.MARK_NONE : (int) mark[0], mark == null ? 0 : mark[1],
++            days == null ? 0 : days, System.currentTimeMillis() / 1000, s);
++    }
++
++    public boolean isTrusted(long dialogId) {
++        return TrustRules.isTrusted(verdict(dialogId));
++    }
++
++    // A dialog-level check for callers that have no message (story preload,
++    // the chat list's thumbnail size).
++    public boolean allowsDialog(long dialogId) {
++        return !gateActive() || isTrusted(dialogId);
++    }
++
++    public boolean callP2PAllowed(TLRPC.User user) {
++        final TrustRules.Settings s = settings();
++        if (!s.on || !s.relay) {
++            return true;
++        }
++        return user != null && isTrusted(user.id);
++    }
++
++    public static boolean callP2P(int account, TLRPC.User user) {
++        return account < 0 || getInstance(account).callP2PAllowed(user);
++    }
++
++    public boolean allows(MessageObject messageObject) {
++        if (messageObject == null || messageObject.messageOwner == null || !gateActive()) {
++            return true;
++        }
++        return allows(messageObject.messageOwner);
++    }
++
++    public boolean allows(TLRPC.Message message) {
++        if (message == null || !gateActive()) {
++            return true;
++        }
++        final long dialogId = MessageObject.getDialogId(message);
++        if (isTapped(dialogId, message.id)) {
++            return true;
++        }
++        final TrustRules.Settings s = settings();
++        final int why = verdict(dialogId);
++        int senderWhy = -1;
++        if (s.sender && !TrustRules.isTrusted(why) && why != TrustRules.WHY_NEVER && dialogId < 0) {
++            final long from = MessageObject.getFromChatId(message);
++            if (from > 0 && kindIsGroup(dialogId)) {
++                senderWhy = verdict(from);
++            }
++        }
++        final boolean own = message.out && message.fwd_from == null;
++        if (TrustRules.allowsMessage(why, own, senderWhy, s)) {
++            return true;
++        }
++        maybeToast(dialogId, why);
++        return false;
++    }
++
++    private boolean kindIsGroup(long dialogId) {
++        final TLRPC.Chat chat = getMessagesController().getChat(-dialogId);
++        return chat != null && !ChatObject.isChannelAndNotMegaGroup(chat);
++    }
++
++    // ---- taps (this session) ----
++
++    private boolean isTapped(long dialogId, int id) {
++        synchronized (tapped) {
++            final SparseBooleanArray ids = tapped.get(dialogId);
++            return ids != null && ids.get(id);
++        }
++    }
++
++    private void addTapped(long dialogId, int id) {
++        synchronized (tapped) {
++            SparseBooleanArray ids = tapped.get(dialogId);
++            if (ids == null) {
++                tapped.put(dialogId, ids = new SparseBooleanArray());
++            }
++            ids.put(id, true);
++        }
++    }
++
++    // First tap on a waiting message in a chat cell: true when it newly
++    // unlocks something you see (the cell then rebinds instead of running
++    // the tap). Voice and music taps run as stock right away.
++    public static boolean noteTapped(MessageObject messageObject) {
++        if (messageObject == null || messageObject.messageOwner == null || !gateActive()) {
++            return false;
++        }
++        final TrustController tc = getInstance(messageObject.currentAccount);
++        if (tc.allows(messageObject.messageOwner)) {
++            return false;
++        }
++        tc.addTapped(messageObject.getDialogId(), messageObject.getId());
++        return !(messageObject.isVoice() || messageObject.isMusic());
++    }
++
++    // ---- image gate G (ImageReceiver.setImage) ----
++
++    // Returns null to pass everything through (no allocation), otherwise the
++    // new {media, image, thumb} locations.
++    public static ImageLocation[] filter(ImageReceiver receiver, MessageObject messageObject, ImageLocation media, ImageLocation image, ImageLocation thumb) {
++        final View parent = receiver.getParentView();
++        if (!(parent instanceof ChatMessageCell || parent instanceof DialogCell || parent instanceof BackupImageView)) {
++            return null; // viewers, shared media, anything you opened yourself
++        }
++        if (messageObject.messageOwner == null) {
++            return null;
++        }
++        final TrustController tc = getInstance(messageObject.currentAccount);
++        if (receiver.isForceLoding()) {
++            if (!tc.allows(messageObject.messageOwner)) {
++                tc.addTapped(messageObject.getDialogId(), messageObject.getId());
++            }
++            return null;
++        }
++        if (tc.allows(messageObject.messageOwner)) {
++            return null;
++        }
++        if (messageObject.isDice() || messageObject.isAnimatedEmoji() || messageObject.isAnimatedEmojiStickers()) {
++            return null; // official dice and emoji packs: the result is the animation
++        }
++        final TLRPC.Document document = messageObject.getDocument();
++        if (document != null && (MessageObject.isStickerDocument(document) || MessageObject.isAnimatedStickerDocument(document, true))) {
++            if (!MessageObject.isAnimatedStickerDocument(document, true) && !MessageObject.isVideoStickerDocument(document)) {
++                return null; // static sticker
++            }
++            if (media == null && image == null) {
++                return null;
++            }
++            return new ImageLocation[]{null, null, thumb}; // still picture: thumb and outline
++        }
++        final ImageLocation m = isLocal(media, messageObject) ? media : null;
++        final ImageLocation i = isLocal(image, messageObject) ? image : null;
++        final ImageLocation t = isLocal(thumb, messageObject) ? thumb : null;
++        if (m == media && i == image && t == thumb) {
++            return null;
++        }
++        return new ImageLocation[]{m, i, t};
++    }
++
++    private static boolean isLocal(ImageLocation location, MessageObject messageObject) {
++        if (location == null) {
++            return true;
++        } else if (location.photoSize instanceof TLRPC.TL_photoStrippedSize || location.photoSize instanceof TLRPC.TL_photoPathSize) {
++            return true; // bytes inside the message
++        } else if (location.path != null) {
++            return !location.path.startsWith("http"); // a local file, not a direct URL
++        } else if (location.webFile != null) {
++            return !location.webFile.noproxy; // fetched by Telegram (static maps)
++        } else if (location.secureDocument != null) {
++            return true;
++        }
++        // A cached photo shows; GIF, video and document locations stay off
++        // even when cached, so nothing autoplays.
++        return location.document == null && location.photoSize != null && messageObject.mediaExists;
++    }
++
++    // ---- toast, menu, rebind ----
++
++    private void maybeToast(long dialogId, int why) {
++        if (why == TrustRules.WHY_NEVER || Looper.myLooper() != Looper.getMainLooper()) {
++            return;
++        }
++        synchronized (toasted) {
++            if (toasted.contains(dialogId)) {
++                return;
++            }
++        }
++        final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
++        if (!(fragment instanceof ChatActivity) || fragment.getCurrentAccount() != currentAccount || ((ChatActivity) fragment).getDialogId() != dialogId) {
++            return;
++        }
++        synchronized (toasted) {
++            toasted.add(dialogId);
++        }
++        AndroidUtilities.runOnUIThread(() -> {
++            if (LaunchActivity.getSafeLastFragment() != fragment) {
++                return;
++            }
++            BulletinFactory.of(fragment).createSimpleBulletin(R.raw.info, "Media here waits for a tap", "Trust this chat", () -> setMark(dialogId, TrustRules.MARK_TRUSTED)).show();
++        });
++    }
++
++    // After a mark change: rebind the open chat's cells so the gates re-run.
++    private void rebindOpenChat(long dialogId) {
++        final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
++        if (!(fragment instanceof ChatActivity) || fragment.getCurrentAccount() != currentAccount || trustKey(((ChatActivity) fragment).getDialogId()) != trustKey(dialogId)) {
++            return;
++        }
++        final RecyclerListView listView = ((ChatActivity) fragment).getChatListView();
++        if (listView == null || listView.getAdapter() == null) {
++            return;
++        }
++        for (int a = 0, n = listView.getChildCount(); a < n; a++) {
++            final View child = listView.getChildAt(a);
++            if (child instanceof ChatMessageCell && ((ChatMessageCell) child).getMessageObject() != null) {
++                ((ChatMessageCell) child).getMessageObject().forceUpdate = true;
++            }
++        }
++        listView.getAdapter().notifyDataSetChanged();
++    }
++
++    public boolean menuShown(long dialogId) {
++        final int why = verdict(dialogId);
++        return why != TrustRules.WHY_OFF && why != TrustRules.WHY_OWN;
++    }
++
++    // Same state-first labels as desktop.
++    public String menuText(long dialogId) {
++        switch (verdict(dialogId)) {
++            case TrustRules.WHY_NEVER: return "Never trusted · Clear";
++            case TrustRules.WHY_HAND:
++            case TrustRules.WHY_GRACE:
++            case TrustRules.WHY_ACTIVE: return "Trusted (you) · Untrust";
++            case TrustRules.WHY_ADMIN: return "Trusted (admin) · Never trust";
++            case TrustRules.WHY_ACTIVE_CONTACT: return "Trusted (active contact) · Never trust";
++            case TrustRules.WHY_DORMANT: return "Dormant (you) · Trust again";
++            case TrustRules.WHY_OFF:
++            case TrustRules.WHY_OWN: return "Media trust";
++            default: return "Untrusted · Trust this chat";
++        }
++    }
++
++    public void menuClicked(long dialogId) {
++        switch (verdict(dialogId)) {
++            case TrustRules.WHY_NEVER:
++            case TrustRules.WHY_HAND:
++            case TrustRules.WHY_GRACE:
++            case TrustRules.WHY_ACTIVE: setMark(dialogId, TrustRules.MARK_NONE); break;
++            case TrustRules.WHY_ADMIN:
++            case TrustRules.WHY_ACTIVE_CONTACT: setMark(dialogId, TrustRules.MARK_NEVER); break;
++            case TrustRules.WHY_OFF:
++            case TrustRules.WHY_OWN: break;
++            default: setMark(dialogId, TrustRules.MARK_TRUSTED); break;
++        }
++    }
++
++    // Called as the chat's ⋮ menu opens: label and visibility follow the
++    // current verdict (a toast or another device-side change may have moved it).
++    public void updateMenuItem(ActionBarMenuItem headerItem, long dialogId) {
++        if (headerItem == null) {
++            return;
++        }
++        final View view = headerItem.getSubItem(MENU_ID);
++        if (view instanceof ActionBarMenuSubItem) {
++            final boolean shown = menuShown(dialogId);
++            view.setVisibility(shown ? View.VISIBLE : View.GONE);
++            if (shown) {
++                ((ActionBarMenuSubItem) view).setText(menuText(dialogId));
++            }
++        }
++    }
++
++    // ---- activity log (storage queue) ----
++
++    private static int offset(long unixtime) {
++        return TimeZone.getDefault().getOffset(unixtime * 1000L) / 1000;
++    }
++
++    private static int today() {
++        final long now = System.currentTimeMillis() / 1000;
++        return TrustRules.day(now, offset(now));
++    }
++
++    // The private-chat peer of an incoming regular message, or 0.
++    private static long incomingPeer(TLRPC.Message message, long selfId) {
++        if (message == null || message.out || message.action != null || message.peer_id == null) {
++            return 0;
++        }
++        long dialogId = message.dialog_id;
++        if (dialogId == 0) {
++            if (message.peer_id.chat_id != 0 || message.peer_id.channel_id != 0) {
++                return 0;
++            }
++            dialogId = message.from_id == null || message.guestchat_via_from != null ? message.peer_id.user_id : message.from_id.user_id;
++        }
++        return DialogObject.isUserDialog(dialogId) && dialogId != selfId ? dialogId : 0;
++    }
++
++    private static final String CREATE = "CREATE TABLE IF NOT EXISTS tc_activity(uid INTEGER, day INTEGER, PRIMARY KEY(uid, day))";
++
++    // Top of MessagesStorage.putMessagesInternal (realtime) and of
++    // putMessages(messages_Messages, ...) (history pages), storage queue.
++    public void noteIncoming(ArrayList<TLRPC.Message> messages, int mode) {
++        if (messages == null || messages.isEmpty() || mode != 0) {
++            return;
++        }
++        SQLitePreparedStatement state = null;
++        try {
++            final SQLiteDatabase database = getMessagesStorage().getDatabase();
++            if (database == null) {
++                return;
++            }
++            final long selfId = getUserConfig().getClientUserId();
++            final int today = today();
++            boolean changed = false;
++            for (int a = 0; a < messages.size(); a++) {
++                final TLRPC.Message message = messages.get(a);
++                final long uid = incomingPeer(message, selfId);
++                if (uid == 0) {
++                    continue;
++                }
++                final int day = TrustRules.day(message.date, offset(message.date));
++                if (day < today - TrustRules.KEEP_DAYS || day > today + 1) {
++                    continue;
++                }
++                SparseBooleanArray days = logged.get(uid);
++                if (days != null && days.get(day)) {
++                    continue; // this person already has this day
++                }
++                if (state == null) {
++                    database.executeFast(CREATE).stepThis().dispose();
++                    state = database.executeFast("INSERT OR IGNORE INTO tc_activity VALUES(?, ?)");
++                }
++                state.requery();
++                state.bindLong(1, uid);
++                state.bindInteger(2, day);
++                state.step();
++                if (days == null) {
++                    logged.put(uid, days = new SparseBooleanArray());
++                }
++                days.put(day, true);
++                changed = true;
++            }
++            if (changed) {
++                queueRefresh(2000);
++            }
++        } catch (Exception e) {
++            FileLog.e(e);
++        } finally {
++            if (state != null) {
++                state.dispose();
++            }
++        }
++    }
++
++    private void queueRefresh(long delay) {
++        getMessagesStorage().getStorageQueue().postRunnable(() -> {
++            if (refreshQueued) {
++                return;
++            }
++            refreshQueued = true;
++            getMessagesStorage().getStorageQueue().postRunnable(() -> {
++                refreshQueued = false;
++                refresh();
++            }, delay);
++        });
++    }
++
++    // Storage queue: prune, backfill once, read the active-day counts.
++    private void refresh() {
++        SQLiteCursor cursor = null;
++        try {
++            final SQLiteDatabase database = getMessagesStorage().getDatabase();
++            if (database == null) {
++                return;
++            }
++            final int today = today();
++            if (!database.tableExists("tc_activity")) {
++                database.executeFast(CREATE).stepThis().dispose();
++                backfill(database, today);
++            }
++            database.executeFast("DELETE FROM tc_activity WHERE day < " + (today - TrustRules.KEEP_DAYS)).stepThis().dispose();
++            // Active days inside the window (today and the d - 1 days before).
++            final int first = today - settings().d + 1;
++            final LongSparseArray<SparseBooleanArray> all = new LongSparseArray<>();
++            final LongSparseArray<Integer> next = new LongSparseArray<>();
++            cursor = database.queryFinalized("SELECT uid, day FROM tc_activity");
++            while (cursor.next()) {
++                final long uid = cursor.longValue(0);
++                final int day = cursor.intValue(1);
++                SparseBooleanArray days = all.get(uid);
++                if (days == null) {
++                    all.put(uid, days = new SparseBooleanArray());
++                }
++                days.put(day, true);
++                if (day >= first) {
++                    final Integer count = next.get(uid);
++                    next.put(uid, count == null ? 1 : count + 1);
++                }
++            }
++            cursor.dispose();
++            cursor = null;
++            logged = all;
++            activeDays = next;
++            clearVerdicts();
++        } catch (Exception e) {
++            FileLog.e(e);
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++        }
++    }
++
++    // Once per account database (the table is created here, and the
++    // database goes away on logout): count what is still cached, with the
++    // live feed's rules.
++    private void backfill(SQLiteDatabase database, int today) {
++        SQLiteCursor cursor = null;
++        SQLitePreparedStatement state = null;
++        try {
++            final long selfId = getUserConfig().getClientUserId();
++            final long since = System.currentTimeMillis() / 1000 - TrustRules.KEEP_DAYS * 86400L;
++            state = database.executeFast("INSERT OR IGNORE INTO tc_activity VALUES(?, ?)");
++            cursor = database.queryFinalized("SELECT uid, date, data FROM messages_v2 WHERE uid > 0 AND out = 0 AND date >= " + since);
++            while (cursor.next()) {
++                final long uid = cursor.longValue(0);
++                if (!DialogObject.isUserDialog(uid) || uid == selfId) {
++                    continue;
++                }
++                final NativeByteBuffer data = cursor.byteBufferValue(2);
++                if (data == null) {
++                    continue;
++                }
++                final TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
++                data.reuse();
++                if (message == null || message.action != null || message.out) {
++                    continue;
++                }
++                final int date = cursor.intValue(1);
++                final int day = TrustRules.day(date, offset(date));
++                if (day < today - TrustRules.KEEP_DAYS || day > today + 1) {
++                    continue;
++                }
++                state.requery();
++                state.bindLong(1, uid);
++                state.bindInteger(2, day);
++                state.step();
++            }
++        } catch (Exception e) {
++            FileLog.e(e);
++        } finally {
++            if (cursor != null) {
++                cursor.dispose();
++            }
++            if (state != null) {
++                state.dispose();
++            }
++        }
++    }
++}
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java b/TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java
+new file mode 100644
+index 00000000..090ef52d
+--- /dev/null
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java
+@@ -0,0 +1,123 @@
++package org.telegram.messenger;
++
++// telegram-custom: the media trust rule table (docs/trust.md section 1), pure
++// Java with no Android or app imports, so CI can unit-test it with plain javac
++// (android/tests/TrustRulesTest.java). Mirrors desktop's custom_trust_rules.h.
++public final class TrustRules {
++
++    private TrustRules() {
++    }
++
++    // Dialog kind.
++    public static final int KIND_SELF = 0; // Saved Messages
++    public static final int KIND_SERVICE = 1; // the Telegram service account, 777000 exactly
++    public static final int KIND_PERSON = 2;
++    public static final int KIND_BOT = 3;
++    public static final int KIND_GROUP = 4; // basic groups and supergroups
++    public static final int KIND_CHANNEL = 5; // broadcast channels
++
++    // Hand mark, as stored.
++    public static final int MARK_NONE = 0;
++    public static final int MARK_TRUSTED = 1;
++    public static final int MARK_NEVER = 2;
++
++    // Verdict for a dialog.
++    public static final int WHY_OFF = 0; // trust model off: stock everywhere
++    public static final int WHY_NEVER = 1; // rule 1
++    public static final int WHY_OWN = 2; // rule 2: Saved Messages, service account
++    public static final int WHY_HAND = 3; // rule 3: group, channel or bot marked by hand
++    public static final int WHY_ADMIN = 4; // rule 4: group you created, channel you created or admin
++    public static final int WHY_GRACE = 5; // rule 5: person marked less than `grace` days ago
++    public static final int WHY_ACTIVE = 6; // rule 6: marked person with enough active days
++    public static final int WHY_ACTIVE_CONTACT = 7; // rule 7
++    public static final int WHY_DORMANT = 8; // marked person below the threshold
++    public static final int WHY_UNTRUSTED = 9; // rule 9
++
++    public static final long SERVICE_USER_ID = 777000;
++    public static final int KEEP_DAYS = 365;
++
++    public static final class Settings {
++        public boolean on = true;
++        public int n = 3; // active days needed (1-30)
++        public int d = 90; // window, days (7-365)
++        public int grace = 90; // days a fresh hand mark trusts on its own (0-365)
++        public boolean admin = true; // rule 4
++        public boolean contacts = true; // rule 7
++        public boolean sender = false; // rule 8
++        public boolean tap = true; // untrusted chats: tap to load
++        public boolean relay = true; // untrusted calls: relay only
++    }
++
++    public static int clamp(int value, int min, int max) {
++        return Math.max(min, Math.min(max, value));
++    }
++
++    public static boolean isTrusted(int why) {
++        switch (why) {
++            case WHY_OFF:
++            case WHY_OWN:
++            case WHY_HAND:
++            case WHY_ADMIN:
++            case WHY_GRACE:
++            case WHY_ACTIVE:
++            case WHY_ACTIVE_CONTACT:
++                return true;
++            default:
++                return false;
++        }
++    }
++
++    // A person whose own trust widens their messages in a group (rule 8).
++    public static boolean isTrustedSender(int why) {
++        return why == WHY_GRACE || why == WHY_ACTIVE || why == WHY_ACTIVE_CONTACT;
++    }
++
++    // Rules 0-7 and 9, first match wins. Rule 2's own-message clause and rule
++    // 8 are per message: allowsMessage() below.
++    public static int decide(int kind, boolean creatorOrAdmin, boolean contact, int mark, long markedAt, int activeDays, long now, Settings s) {
++        final boolean person = kind == KIND_PERSON;
++        final boolean chat = kind == KIND_GROUP || kind == KIND_CHANNEL;
++        if (!s.on) {
++            return WHY_OFF;
++        } else if (mark == MARK_NEVER) {
++            return WHY_NEVER;
++        } else if (kind == KIND_SELF || kind == KIND_SERVICE) {
++            return WHY_OWN;
++        } else if (!person && mark == MARK_TRUSTED) {
++            return WHY_HAND;
++        } else if (chat && s.admin && creatorOrAdmin) {
++            return WHY_ADMIN;
++        } else if (person && mark == MARK_TRUSTED) {
++            if (now - markedAt < (long) s.grace * 86400L) {
++                return WHY_GRACE;
++            } else if (activeDays >= s.n) {
++                return WHY_ACTIVE;
++            }
++        }
++        if (person && s.contacts && contact && activeDays >= s.n) {
++            return WHY_ACTIVE_CONTACT;
++        } else if (person && mark == MARK_TRUSTED) {
++            return WHY_DORMANT;
++        }
++        return WHY_UNTRUSTED;
++    }
++
++    // One message: `chatWhy` is the dialog's verdict, `ownOriginal` is a
++    // message you sent that is not a forward, `senderWhy` the sender's own
++    // verdict when rule 8 applies (a person in a group; -1 otherwise).
++    // "Never" beats both the own-message clause and rule 8.
++    public static boolean allowsMessage(int chatWhy, boolean ownOriginal, int senderWhy, Settings s) {
++        if (chatWhy == WHY_NEVER) {
++            return false;
++        } else if (ownOriginal || isTrusted(chatWhy)) {
++            return true;
++        }
++        return s.sender && isTrustedSender(senderWhy);
++    }
++
++    // Local calendar day of a unixtime, given the zone offset at that time.
++    public static int day(long unixtime, int offsetSeconds) {
++        final long v = unixtime + offsetSeconds;
++        return (int) (v >= 0 ? v / 86400L : (v - 86399L) / 86400L);
++    }
++}
+diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java b/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java
+index a01edcfb..1b4371ac 100755
+--- a/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java
++++ b/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java
+@@ -1108,7 +1108,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
+ 				reqCall.user_id = MessagesController.getInstance(currentAccount).getInputUser(user);
+ 				reqCall.protocol = new TL_phone.TL_phoneCallProtocol();
+ 				reqCall.video = videoCall;
+-				reqCall.protocol.udp_p2p = true;
++				reqCall.protocol.udp_p2p = org.telegram.messenger.TrustController.callP2P(currentAccount, user); // telegram-custom: media trust
+ 				reqCall.protocol.udp_reflector = true;
+ 				reqCall.protocol.min_layer = CALL_MIN_LAYER;
+ 				reqCall.protocol.max_layer = Instance.getConnectionMaxLayer();
+@@ -1877,7 +1877,8 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
+ 		req.protocol = new TL_phone.TL_phoneCallProtocol();
+ 		req.protocol.max_layer = Instance.getConnectionMaxLayer();
+ 		req.protocol.min_layer = CALL_MIN_LAYER;
+-		req.protocol.udp_p2p = req.protocol.udp_reflector = true;
++		req.protocol.udp_reflector = true;
++		req.protocol.udp_p2p = org.telegram.messenger.TrustController.callP2P(currentAccount, user); // telegram-custom: media trust
+ 		Collections.addAll(req.protocol.library_versions, NativeInstance.getAllVersions());
+ 		ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+ 			if (error != null) {
+@@ -3420,7 +3421,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
+ 			final boolean enableNs = !(sysNsAvailable && serverConfig.useSystemNs);
+ 			final String logFilePath = BuildVars.DEBUG_VERSION ? VoIPHelper.getLogFilePath("voip" + privateCall.id) : VoIPHelper.getLogFilePath("" + privateCall.id, false);
+ 			final String statsLogFilePath = VoIPHelper.getLogFilePath("" + privateCall.id, true);
+-			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, privateCall.p2p_allowed, enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
++			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, privateCall.p2p_allowed && org.telegram.messenger.TrustController.callP2P(currentAccount, user), enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
+ 			lastLogFilePath = logFilePath;
+ 
+ 			// persistent state
+@@ -4357,7 +4358,8 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
+ 				req1.peer.id = privateCall.id;
+ 				req1.peer.access_hash = privateCall.access_hash;
+ 				req1.protocol = new TL_phone.TL_phoneCallProtocol();
+-				req1.protocol.udp_p2p = req1.protocol.udp_reflector = true;
++				req1.protocol.udp_reflector = true;
++				req1.protocol.udp_p2p = org.telegram.messenger.TrustController.callP2P(currentAccount, user); // telegram-custom: media trust
+ 				req1.protocol.min_layer = CALL_MIN_LAYER;
+ 				req1.protocol.max_layer = Instance.getConnectionMaxLayer();
+ 				Collections.addAll(req1.protocol.library_versions, NativeInstance.getAllVersions());
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+index 6b45401b..f512f63a 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/ChatMessageCell.java
+@@ -17852,6 +17852,11 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
+     }
+ 
+     private void didPressButton(boolean animated, boolean video) {
++        if (org.telegram.messenger.TrustController.noteTapped(currentMessageObject)) { // telegram-custom: media trust: first tap loads it
++            currentMessageObject.forceUpdate = true;
++            setMessageObject(currentMessageObject, currentMessagesGroup, pinnedBottom, pinnedTop, firstInChat, lastInChatList);
++            return;
++        }
+         if (delegate != null && currentMessageObject.isSensitive() && currentMessageObject.hasMediaSpoilers() && !currentMessageObject.needDrawBluredPreview() && !currentMessageObject.isMediaSpoilersRevealed) {
+             delegate.didPressRevealSensitiveContent(this);
+             return;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+index 0fae7fdd..2abf7426 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Cells/DialogCell.java
+@@ -5798,7 +5798,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
+             bigThumb = null;
+         }
+         TLRPC.PhotoSize selectedThumb = bigThumb;
+-        if (selectedThumb == null || !DownloadController.getInstance(currentAccount).canDownloadMedia(DownloadController.AUTODOWNLOAD_TYPE_PHOTO, (long) selectedThumb.size)) {
++        if (selectedThumb == null || !org.telegram.messenger.TrustController.getInstance(currentAccount).allowsDialog(currentDialogId) || !DownloadController.getInstance(currentAccount).canDownloadMedia(DownloadController.AUTODOWNLOAD_TYPE_PHOTO, (long) selectedThumb.size)) { // telegram-custom: media trust
+             selectedThumb = smallThumb;
+         }
+ 
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+index 7ea10cdc..cdd8b302 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/ChatActivity.java
+@@ -3936,6 +3936,8 @@ public class ChatActivity extends BaseFragment implements
+                     }
+                 } else if (id == mute) {
+                     toggleMute(false);
++                } else if (id == org.telegram.messenger.TrustController.MENU_ID) { // telegram-custom: media trust
++                    org.telegram.messenger.TrustController.getInstance(currentAccount).menuClicked(dialog_id);
+                 } else if (id == add_shortcut) {
+                     try {
+                         getMediaDataController().installShortcut(currentUser.id, MediaDataController.SHORTCUT_TYPE_USER_OR_CHAT);
+@@ -4348,6 +4350,7 @@ public class ChatActivity extends BaseFragment implements
+                 @Override
+                 public void onShowSubMenu() {
+                     updateScrimSourceBitmap();
++                    org.telegram.messenger.TrustController.getInstance(currentAccount).updateMenuItem(headerItem, dialog_id); // telegram-custom: media trust
+                 }
+ 
+                 @Override
+@@ -4485,6 +4488,9 @@ public class ChatActivity extends BaseFragment implements
+             if (themeDelegate.isThemeChangeAvailable(true)) {
+                 headerItem.lazilyAddSubItem(change_colors, R.drawable.msg_background, LocaleController.getString(R.string.SetWallpapers));
+             }
++            if (chatMode == 0 && org.telegram.messenger.TrustController.getInstance(currentAccount).menuShown(dialog_id)) { // telegram-custom: media trust
++                headerItem.lazilyAddSubItem(org.telegram.messenger.TrustController.MENU_ID, R.drawable.msg_permissions, org.telegram.messenger.TrustController.getInstance(currentAccount).menuText(dialog_id));
++            }
+             if (currentUser != null && currentUser.self && getDialogId() != UserObject.VERIFY) {
+                 headerItem.lazilyAddSubItem(add_shortcut, R.drawable.msg_home, LocaleController.getString(R.string.AddShortcut));
+             }
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+index e48312c6..0c978330 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/SettingsActivity.java
+@@ -707,6 +707,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+         items.add(SettingCell.Factory.of(9, IconBackgroundColors.ORANGE_DEEP.top, IconBackgroundColors.ORANGE_DEEP.bottom, R.drawable.settings_power, getString(R.string.SettingsPowerSaving), getString(R.string.SettingsPowerSavingInfo)));
+         items.add(SettingCell.Factory.of(10, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_language, getString(R.string.SettingsLanguage), LocaleController.getCurrentLanguageName()));
+         items.add(SettingCell.Factory.of(100, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_stories_stealth, "Ghost mode", "No read receipts, typing or online status", org.telegram.messenger.CustomSettings.isGhostMode() ? "On" : "Off")); // telegram-custom
++        items.add(SettingCell.Factory.of(101, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.msg_permissions, "Media trust", org.telegram.messenger.TrustController.summary())); // telegram-custom: media trust
+ 
+         items.add(UItem.asShadow(null));
+         if (!walletAbove && getMessagesController().config.walletAvailable.get()) {
+@@ -850,6 +851,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
+                 org.telegram.messenger.CustomSettings.setGhostMode(!org.telegram.messenger.CustomSettings.isGhostMode());
+                 listView.adapter.update(true);
+                 break;
++            case 101: // telegram-custom: media trust
++                presentSettingFragment(new TrustSettingsActivity());
++                break;
+ 
+             case 11:
+                 presentSettingFragment(new PremiumPreviewFragment("settings"));
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
+index 12dc19d2..ffdaf7b2 100644
+--- a/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
++++ b/TMessagesProj/src/main/java/org/telegram/ui/Stories/StoriesController.java
+@@ -577,6 +577,9 @@ public class StoriesController {
+         if (storyItem.attachPath != null) {
+             return;
+         }
++        if (!org.telegram.messenger.TrustController.getInstance(currentAccount).allowsDialog(dialogId)) { // telegram-custom: media trust
++            return;
++        }
+         boolean canPreloadStories = DownloadController.getInstance(currentAccount).canPreloadStories();
+         if (!canPreloadStories) {
+             return;
+diff --git a/TMessagesProj/src/main/java/org/telegram/ui/TrustSettingsActivity.java b/TMessagesProj/src/main/java/org/telegram/ui/TrustSettingsActivity.java
+new file mode 100644
+index 00000000..b84de7df
+--- /dev/null
++++ b/TMessagesProj/src/main/java/org/telegram/ui/TrustSettingsActivity.java
+@@ -0,0 +1,105 @@
++package org.telegram.ui;
++
++import android.view.View;
++
++import org.telegram.messenger.TrustController;
++import org.telegram.messenger.TrustRules;
++import org.telegram.ui.ActionBar.AlertDialog;
++import org.telegram.ui.Components.NumberPicker;
++import org.telegram.ui.Components.UItem;
++import org.telegram.ui.Components.UniversalAdapter;
++import org.telegram.ui.Components.UniversalFragment;
++
++import java.util.ArrayList;
++
++// telegram-custom: Settings -> Media trust (docs/trust.md 2.9). One screen,
++// nine rows, same wording as the desktop box. Global for all accounts.
++public class TrustSettingsActivity extends UniversalFragment {
++
++    private static final int ROW_ON = 1;
++    private static final int ROW_TAP = 2;
++    private static final int ROW_RELAY = 3;
++    private static final int ROW_ADMIN = 4;
++    private static final int ROW_CONTACTS = 5;
++    private static final int ROW_SENDER = 6;
++    private static final int ROW_N = 7;
++    private static final int ROW_D = 8;
++    private static final int ROW_GRACE = 9;
++
++    @Override
++    protected CharSequence getTitle() {
++        return "Media trust";
++    }
++
++    @Override
++    protected void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
++        final TrustRules.Settings s = TrustController.settings();
++        items.add(UItem.asCheck(ROW_ON, "Trust model on").setChecked(s.on));
++        items.add(UItem.asCheck(ROW_TAP, "Untrusted chats: tap to load").setChecked(s.tap));
++        items.add(UItem.asCheck(ROW_RELAY, "Untrusted calls: relay only").setChecked(s.relay));
++        items.add(UItem.asShadow("Media from chats you do not trust waits for a tap: only the blurred preview shows, nothing autoplays, animated stickers stay still. Mark a chat from its ⋮ menu."));
++        items.add(UItem.asCheck(ROW_ADMIN, "Trust groups and channels I run").setChecked(s.admin));
++        items.add(UItem.asCheck(ROW_CONTACTS, "Trust active contacts").setChecked(s.contacts));
++        items.add(UItem.asCheck(ROW_SENDER, "Trust trusted senders in groups").setChecked(s.sender));
++        items.add(UItem.asShadow(null));
++        items.add(UItem.asButton(ROW_N, "Active days needed (1-30)", String.valueOf(s.n)));
++        items.add(UItem.asButton(ROW_D, "Counted over the last days (7-365)", String.valueOf(s.d)));
++        items.add(UItem.asButton(ROW_GRACE, "A hand mark trusts for days (0-365)", String.valueOf(s.grace)));
++        items.add(UItem.asShadow("An active day is a day the person wrote to you in your private chat, as seen by this device. Marks and activity stay on this device."));
++    }
++
++    @Override
++    protected void onClick(UItem item, View view, int position, float x, float y) {
++        final TrustRules.Settings s = TrustController.copySettings();
++        switch (item.id) {
++            case ROW_ON: s.on = !s.on; break;
++            case ROW_TAP: s.tap = !s.tap; break;
++            case ROW_RELAY: s.relay = !s.relay; break;
++            case ROW_ADMIN: s.admin = !s.admin; break;
++            case ROW_CONTACTS: s.contacts = !s.contacts; break;
++            case ROW_SENDER: s.sender = !s.sender; break;
++            case ROW_N: pickNumber(item.id, "Active days needed", 1, 30, s.n); return;
++            case ROW_D: pickNumber(item.id, "Counted over the last days", 7, 365, s.d); return;
++            case ROW_GRACE: pickNumber(item.id, "A hand mark trusts for days", 0, 365, s.grace); return;
++            default: return;
++        }
++        TrustController.saveSettings(s);
++        listView.adapter.update(true);
++    }
++
++    private void pickNumber(int row, String title, int min, int max, int value) {
++        if (getParentActivity() == null) {
++            return;
++        }
++        final NumberPicker picker = new NumberPicker(getParentActivity());
++        picker.setMinValue(min);
++        picker.setMaxValue(max);
++        picker.setValue(value);
++        picker.setWrapSelectorWheel(false);
++        final AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
++        builder.setTitle(title);
++        builder.setView(picker);
++        builder.setNegativeButton("Cancel", null);
++        builder.setPositiveButton("Save", (dialog, which) -> {
++            final TrustRules.Settings s = TrustController.copySettings();
++            final int v = TrustRules.clamp(picker.getValue(), min, max);
++            if (row == ROW_N) {
++                s.n = v;
++            } else if (row == ROW_D) {
++                s.d = v;
++            } else {
++                s.grace = v;
++            }
++            TrustController.saveSettings(s);
++            if (listView != null) {
++                listView.adapter.update(true);
++            }
++        });
++        showDialog(builder.create());
++    }
++
++    @Override
++    protected boolean onLongClick(UItem item, View view, int position, float x, float y) {
++        return false;
++    }
++}
+-- 
+2.55.0
+
