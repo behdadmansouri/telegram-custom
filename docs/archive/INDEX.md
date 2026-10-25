@@ -11,3 +11,4 @@ Evidence: dated research and readouts, frozen once read. Conclusions live in `do
 | 2026-10-25-caption-ungroup.md | patch 0008 notes: where the album/ungroup decision sits and why each exception | 2026-10-25 |
 | 2026-10-25-night.md | log of the overnight batch-2 run | 2026-10-25 |
 | 2026-10-25-whats-custom-critique-1.md | critique round 1 of docs/whats-custom.md: anchors checked at 0aae9598/v7.2.5 and origin/batch-2, 9 objections, verdict at the end | 2026-10-25 |
+| 2026-10-25-trust-desktop.md | desktop trust patch 0009: what each hook does, deviations from docs/trust.md, CI compile rounds | 2026-10-25 |

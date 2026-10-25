@@ -54,6 +54,20 @@ jobs:
       - name: Patch lint
         run: bash .github/patch-lint.sh
 
+      # Trust model guard (docs/trust.md 4.1, C1/C2): upstream calling a gated
+      # media function from a new file, or dropping a hooked one, fails here
+      # before the long build; then the rule table's unit test.
+      - name: Media caller guard + trust rule tests
+        run: |
+          git config --global --add safe.directory '*'
+          desktop/build.sh --tree
+          source desktop/UPSTREAM
+          tree=$TG_CUSTOM_CACHE/src/tdesktop-$TDESKTOP_VERSION-full
+          bash .github/media-callers.sh check desktop "$tree" upstream
+          g++ -std=c++20 -Wall -Wextra -Werror -I "$tree/Telegram/SourceFiles" \
+            desktop/tests/trust_rules_test.cpp -o /tmp/trust_rules_test
+          /tmp/trust_rules_test
+
       - uses: actions/cache@v4
         with:
           path: /tmp/ccache

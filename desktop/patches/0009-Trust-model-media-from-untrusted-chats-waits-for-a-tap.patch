@@ -1,0 +1,1546 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: telegram-custom <telegram-custom@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 01:02:50 -0400
+Subject: [PATCH] Trust model: media from untrusted chats waits for a tap
+
+Chats you have not come to trust (docs/trust.md): no automatic downloads,
+no network thumbnails (photos, documents, replies, link previews), no
+autoplay (cached media included), animated and video stickers static,
+no story preload, calls relay-only. Direct-URL web documents (fetched
+from your own IP) never load while the model is on.
+
+Trusted: Saved Messages, the service account, your own non-forwarded
+messages, groups you created and channels you run, hand marks (people
+decay after the grace period unless active), contacts active on N of
+the last D days in your private chat (counted on this device). Stock
+"Always"/"Never" lists read as marks. Chat menu item with the state
+first; first refusal in the open chat shows a toast that trusts it;
+settings under Advanced -> Automatic media download -> Media trust.
+---
+ Telegram/CMakeLists.txt                       |   3 +
+ Telegram/SourceFiles/calls/calls_call.cpp     |  18 +-
+ .../SourceFiles/custom/custom_settings.cpp    |   5 +
+ Telegram/SourceFiles/custom/custom_trust.cpp  | 667 ++++++++++++++++++
+ Telegram/SourceFiles/custom/custom_trust.h    |  79 +++
+ .../SourceFiles/custom/custom_trust_rules.h   | 114 +++
+ .../SourceFiles/data/data_auto_download.cpp   |  13 +
+ Telegram/SourceFiles/data/data_document.cpp   |   4 +
+ .../SourceFiles/data/data_document_media.cpp  |   2 +
+ .../SourceFiles/data/data_media_types.cpp     |   5 +-
+ .../SourceFiles/data/data_photo_media.cpp     |   5 +
+ .../SourceFiles/data/data_reply_preview.cpp   |   6 +-
+ Telegram/SourceFiles/data/data_stories.cpp    |   6 +
+ Telegram/SourceFiles/history/history.cpp      |   2 +
+ .../view/media/history_view_document.cpp      |   9 +-
+ .../history/view/media/history_view_gif.cpp   |  13 +-
+ .../view/media/history_view_sticker.cpp       |  13 +-
+ .../view/media/history_view_web_page.cpp      |   5 +-
+ .../iv_markdown_history_view_media.cpp        |   5 +
+ .../settings/sections/settings_advanced.cpp   |  11 +
+ .../ui/image/image_location_factory.cpp       |   4 +
+ .../SourceFiles/window/section_widget.cpp     |   7 +-
+ .../SourceFiles/window/window_peer_menu.cpp   |  14 +
+ 23 files changed, 994 insertions(+), 16 deletions(-)
+ create mode 100644 Telegram/SourceFiles/custom/custom_trust.cpp
+ create mode 100644 Telegram/SourceFiles/custom/custom_trust.h
+ create mode 100644 Telegram/SourceFiles/custom/custom_trust_rules.h
+
+diff --git a/Telegram/CMakeLists.txt b/Telegram/CMakeLists.txt
+index 92810ff6..4fe4827b 100644
+--- a/Telegram/CMakeLists.txt
++++ b/Telegram/CMakeLists.txt
+@@ -543,6 +543,9 @@ PRIVATE
+     chat_helpers/ttl_media_layer_widget.h
+     custom/custom_settings.cpp
+     custom/custom_settings.h
++    custom/custom_trust.cpp
++    custom/custom_trust.h
++    custom/custom_trust_rules.h
+     core/application.cpp
+     core/application.h
+     core/proxy_rotation_manager.cpp
+diff --git a/Telegram/SourceFiles/calls/calls_call.cpp b/Telegram/SourceFiles/calls/calls_call.cpp
+index 4edd70be..5962fa8b 100644
+--- a/Telegram/SourceFiles/calls/calls_call.cpp
++++ b/Telegram/SourceFiles/calls/calls_call.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "calls/calls_call.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "apiwrap.h"
+ #include "base/openssl_help.h"
+@@ -353,7 +354,9 @@ void Call::startOutgoing() {
+ 		MTP_int(base::RandomValue<int32>()),
+ 		MTP_bytes(_gaHash),
+ 		MTP_phoneCallProtocol(
+-			MTP_flags(MTPDphoneCallProtocol::Flag::f_udp_p2p
++			MTP_flags((Custom::CallP2PAllowed(_user) // telegram-custom
++					? MTPDphoneCallProtocol::Flag::f_udp_p2p
++					: MTPDphoneCallProtocol::Flag(0))
+ 				| MTPDphoneCallProtocol::Flag::f_udp_reflector),
+ 			MTP_int(kMinLayer),
+ 			MTP_int(tgcalls::Meta::MaxLayer()),
+@@ -487,7 +490,9 @@ void Call::actuallyAnswer() {
+ 		MTP_inputPhoneCall(MTP_long(_id), MTP_long(_accessHash)),
+ 		MTP_bytes(_gb),
+ 		MTP_phoneCallProtocol(
+-			MTP_flags(MTPDphoneCallProtocol::Flag::f_udp_p2p
++			MTP_flags((Custom::CallP2PAllowed(_user) // telegram-custom
++					? MTPDphoneCallProtocol::Flag::f_udp_p2p
++					: MTPDphoneCallProtocol::Flag(0))
+ 				| MTPDphoneCallProtocol::Flag::f_udp_reflector),
+ 			MTP_int(kMinLayer),
+ 			MTP_int(tgcalls::Meta::MaxLayer()),
+@@ -971,7 +976,9 @@ void Call::confirmAcceptedCall(const MTPDphoneCallAccepted &call) {
+ 		MTP_bytes(_ga),
+ 		MTP_long(_keyFingerprint),
+ 		MTP_phoneCallProtocol(
+-			MTP_flags(MTPDphoneCallProtocol::Flag::f_udp_p2p
++			MTP_flags((Custom::CallP2PAllowed(_user) // telegram-custom
++					? MTPDphoneCallProtocol::Flag::f_udp_p2p
++					: MTPDphoneCallProtocol::Flag(0))
+ 				| MTPDphoneCallProtocol::Flag::f_udp_reflector),
+ 			MTP_int(kMinLayer),
+ 			MTP_int(tgcalls::Meta::MaxLayer()),
+@@ -1048,6 +1055,8 @@ void Call::createAndStartController(const MTPDphoneCall &call) {
+ 	LOG(("Call Info: Creating instance with version '%1', allowP2P: %2").arg(
+ 		QString::fromUtf8(version),
+ 		Logs::b(call.is_p2p_allowed())));
++	LOG(("Call Info: telegram-custom trust allows P2P: %1").arg( // telegram-custom
++		Logs::b(Custom::CallP2PAllowed(_user))));
+ 
+ 	const auto versionString = version.toStdString();
+ 	const auto &settings = Core::App().settings();
+@@ -1087,7 +1096,8 @@ void Call::createAndStartController(const MTPDphoneCall &call) {
+ 				= serverConfig.callConnectTimeoutMs / 1000.,
+ 			.receiveTimeout = serverConfig.callPacketTimeoutMs / 1000.,
+ 			.dataSaving = tgcalls::DataSaving::Never,
+-			.enableP2P = call.is_p2p_allowed(),
++			.enableP2P = (call.is_p2p_allowed()
++				&& Custom::CallP2PAllowed(_user)), // telegram-custom
+ 			.enableAEC = false,
+ 			.enableNS = true,
+ 			.enableAGC = true,
+diff --git a/Telegram/SourceFiles/custom/custom_settings.cpp b/Telegram/SourceFiles/custom/custom_settings.cpp
+index 425da95c..21469a44 100644
+--- a/Telegram/SourceFiles/custom/custom_settings.cpp
++++ b/Telegram/SourceFiles/custom/custom_settings.cpp
+@@ -45,7 +45,12 @@ void Save() {
+ 	for (const auto id : Get().hiddenFolderCounters) {
+ 		list.push_back(int(id));
+ 	}
++	// Start from the file: other modules keep their own keys here
++	// (custom_trust.cpp: "trust").
+ 	auto object = QJsonObject();
++	if (auto old = QFile(Path()); old.open(QIODevice::ReadOnly)) {
++		object = QJsonDocument::fromJson(old.readAll()).object();
++	}
+ 	object.insert(u"hiddenFolderCounters"_q, list);
+ 	object.insert(u"ghostMode"_q, Get().ghostMode);
+ 
+diff --git a/Telegram/SourceFiles/custom/custom_trust.cpp b/Telegram/SourceFiles/custom/custom_trust.cpp
+new file mode 100644
+index 00000000..ea0cf012
+--- /dev/null
++++ b/Telegram/SourceFiles/custom/custom_trust.cpp
+@@ -0,0 +1,667 @@
++// telegram-custom: see custom_trust.h.
++#include "custom/custom_trust.h"
++
++#include "base/timer.h"
++#include "base/unixtime.h"
++#include "core/application.h"
++#include "data/data_auto_download.h"
++#include "data/data_channel.h"
++#include "data/data_chat.h"
++#include "data/data_peer.h"
++#include "data/data_session.h"
++#include "data/data_user.h"
++#include "dialogs/dialogs_key.h"
++#include "history/history.h"
++#include "history/history_item.h"
++#include "history/history_item_components.h"
++#include "history/view/history_view_element.h"
++#include "lang/lang_keys.h"
++#include "main/main_account.h"
++#include "main/main_domain.h"
++#include "main/main_session.h"
++#include "main/main_session_settings.h"
++#include "settings.h"
++#include "ui/layers/generic_box.h"
++#include "ui/text/text_utilities.h"
++#include "ui/toast/toast.h"
++#include "ui/widgets/checkbox.h"
++#include "ui/widgets/fields/number_input.h"
++#include "ui/widgets/labels.h"
++#include "ui/wrap/padding_wrap.h"
++#include "ui/qt_object_factory.h"
++#include "ui/ui_utility.h"
++#include "window/window_controller.h"
++#include "window/window_session_controller.h"
++#include "styles/style_layers.h"
++#include "styles/style_widgets.h"
++
++#include <QtCore/QCoreApplication>
++#include <QtCore/QFile>
++#include <QtCore/QSaveFile>
++#include <QtCore/QJsonArray>
++#include <QtCore/QJsonDocument>
++#include <QtCore/QJsonObject>
++
++namespace Custom {
++namespace {
++
++using namespace TrustRules;
++
++constexpr auto kKeepDays = 365;
++constexpr auto kSaveDelay = crl::time(10000);
++constexpr auto kVerdictTtl = crl::time(60000); // contacts, admin rights
++
++struct Account {
++	QString path;
++	// peer id -> mark, markedAt. An explicit None hides the stock lists.
++	base::flat_map<uint64, std::pair<Mark, int64>> marks;
++	// Stock "Always" list: peer id -> first seen (the mark's date).
++	base::flat_map<uint64, int64> stockSeen;
++	// Private-chat activity: peer id -> sorted local Julian days.
++	base::flat_map<uint64, std::vector<int>> days;
++	base::flat_map<not_null<PeerData*>, Why> verdicts;
++	crl::time verdictsAt = 0;
++	Main::Session *session = nullptr; // caches above belong to it
++	bool dirty = false;
++};
++
++struct Global {
++	TrustSettings settings;
++	base::flat_map<uint64, std::unique_ptr<Account>> accounts;
++	base::flat_set<not_null<PeerData*>> toasted;
++	base::Timer *saveTimer = nullptr; // never freed: lives until exit
++	rpl::event_stream<> changes;
++};
++
++const HistoryItem *CurrentItem = nullptr;
++
++[[nodiscard]] QString SettingsPath() {
++	return cWorkingDir() + u"custom.json"_q;
++}
++
++[[nodiscard]] QJsonObject ReadObject(const QString &path) {
++	auto file = QFile(path);
++	return file.open(QIODevice::ReadOnly)
++		? QJsonDocument::fromJson(file.readAll()).object()
++		: QJsonObject();
++}
++
++void WriteObject(const QString &path, const QJsonObject &object) {
++	// Atomic: a crash mid-write can't truncate the old file.
++	auto file = QSaveFile(path);
++	if (file.open(QIODevice::WriteOnly)) {
++		file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
++		file.commit();
++	}
++}
++
++void LoadSettings(TrustSettings &s) {
++	const auto o = ReadObject(SettingsPath()).value(u"trust"_q).toObject();
++	const auto flag = [&](const QString &key, bool &value) {
++		value = o.value(key).toBool(value);
++	};
++	const auto number = [&](const QString &key, int &value, int lo, int hi) {
++		value = std::clamp(o.value(key).toInt(value), lo, hi);
++	};
++	flag(u"on"_q, s.on);
++	number(u"n"_q, s.n, 1, 30);
++	number(u"d"_q, s.d, 7, 365);
++	number(u"grace"_q, s.grace, 0, 365);
++	flag(u"admin"_q, s.admin);
++	flag(u"contacts"_q, s.contacts);
++	flag(u"sender"_q, s.sender);
++	flag(u"tap"_q, s.tap);
++	flag(u"relay"_q, s.relay);
++}
++
++void SaveSettings(const TrustSettings &s) {
++	auto o = QJsonObject();
++	o.insert(u"on"_q, s.on);
++	o.insert(u"n"_q, s.n);
++	o.insert(u"d"_q, s.d);
++	o.insert(u"grace"_q, s.grace);
++	o.insert(u"admin"_q, s.admin);
++	o.insert(u"contacts"_q, s.contacts);
++	o.insert(u"sender"_q, s.sender);
++	o.insert(u"tap"_q, s.tap);
++	o.insert(u"relay"_q, s.relay);
++	auto object = ReadObject(SettingsPath()); // keep custom_settings' keys
++	object.insert(u"trust"_q, o);
++	WriteObject(SettingsPath(), object);
++}
++
++Global &G() {
++	static auto global = [] {
++		auto result = std::make_unique<Global>();
++		LoadSettings(result->settings);
++		return result;
++	}();
++	return *global;
++}
++
++[[nodiscard]] int Today() {
++	return int(QDate::currentDate().toJulianDay());
++}
++
++void LoadAccount(Account &account) {
++	auto object = QJsonObject();
++	auto file = QFile(account.path);
++	if (file.open(QIODevice::ReadOnly)) {
++		const auto bytes = file.readAll();
++		file.close();
++		auto error = QJsonParseError();
++		object = QJsonDocument::fromJson(bytes, &error).object();
++		if (error.error != QJsonParseError::NoError
++			&& !bytes.trimmed().isEmpty()) {
++			// Keep the marks for the user instead of overwriting them.
++			QFile::rename(
++				account.path,
++				(account.path
++					+ u".corrupt-"_q
++					+ QString::number(base::unixtime::now())));
++		}
++	}
++	const auto marks = object.value(u"marks"_q).toObject();
++	for (auto i = marks.begin(); i != marks.end(); ++i) {
++		const auto pair = i.value().toArray();
++		const auto state = pair.at(0).toInt();
++		if (state >= 0 && state <= 2) {
++			account.marks[i.key().toULongLong()] = {
++				Mark(state),
++				int64(pair.at(1).toDouble()),
++			};
++		}
++	}
++	const auto stock = object.value(u"stock"_q).toObject();
++	for (auto i = stock.begin(); i != stock.end(); ++i) {
++		account.stockSeen[i.key().toULongLong()] = int64(i.value().toDouble());
++	}
++	const auto min = Today() - kKeepDays;
++	const auto days = object.value(u"days"_q).toObject();
++	for (auto i = days.begin(); i != days.end(); ++i) {
++		auto list = std::vector<int>();
++		for (const auto &day : i.value().toArray()) {
++			if (day.toInt() >= min) {
++				list.push_back(day.toInt());
++			}
++		}
++		ranges::sort(list);
++		list.erase(ranges::unique(list), end(list));
++		if (!list.empty()) {
++			account.days[i.key().toULongLong()] = std::move(list);
++		}
++	}
++}
++
++void SaveAccount(Account &account) {
++	account.dirty = false;
++	auto marks = QJsonObject();
++	for (const auto &[peer, mark] : account.marks) {
++		marks.insert(QString::number(peer), QJsonArray{
++			int(mark.first),
++			double(mark.second),
++		});
++	}
++	auto stock = QJsonObject();
++	for (const auto &[peer, seen] : account.stockSeen) {
++		stock.insert(QString::number(peer), double(seen));
++	}
++	auto days = QJsonObject();
++	for (const auto &[peer, list] : account.days) {
++		auto array = QJsonArray();
++		for (const auto day : list) {
++			array.push_back(day);
++		}
++		days.insert(QString::number(peer), array);
++	}
++	auto object = QJsonObject();
++	object.insert(u"marks"_q, marks);
++	object.insert(u"stock"_q, stock);
++	object.insert(u"days"_q, days);
++	WriteObject(account.path, object);
++}
++
++void SaveDirty() {
++	for (const auto &[key, account] : G().accounts) {
++		if (account->dirty) {
++			SaveAccount(*account);
++		}
++	}
++}
++
++void ScheduleSave(Account &account) {
++	account.dirty = true;
++	auto &g = G();
++	if (!g.saveTimer) {
++		g.saveTimer = new base::Timer([] { SaveDirty(); });
++		if (const auto app = QCoreApplication::instance()) {
++			QObject::connect(app, &QCoreApplication::aboutToQuit, [] {
++				SaveDirty();
++			});
++		}
++	}
++	if (!g.saveTimer->isActive()) {
++		g.saveTimer->callOnce(kSaveDelay);
++	}
++}
++
++Account &AccountFor(not_null<Main::Session*> session) {
++	auto &g = G();
++	const auto key = session->uniqueId();
++	auto i = g.accounts.find(key);
++	if (i == end(g.accounts)) {
++		auto account = std::make_unique<Account>();
++		account->path = cWorkingDir()
++			+ u"trust_"_q
++			+ QString::number(key)
++			+ u".json"_q;
++		LoadAccount(*account);
++		i = g.accounts.emplace(key, std::move(account)).first;
++	}
++	auto &account = *i->second;
++	if (account.session != session.get()) {
++		// Verdicts and toasts are keyed by PeerData*: drop them with
++		// the session that owns those peers.
++		account.session = session.get();
++		account.verdicts.clear();
++		session->lifetime().add([key] {
++			auto &g = G();
++			const auto j = g.accounts.find(key);
++			if (j != end(g.accounts)) {
++				j->second->verdicts.clear();
++				j->second->session = nullptr;
++			}
++			g.toasted.clear();
++		});
++	}
++	return account;
++}
++
++[[nodiscard]] int ActiveDays(const Account &account, uint64 peer, int d) {
++	const auto i = account.days.find(peer);
++	if (i == end(account.days)) {
++		return 0;
++	}
++	const auto from = Today() - d + 1;
++	return int(ranges::count_if(i->second, [&](int day) {
++		return day >= from;
++	}));
++}
++
++[[nodiscard]] Why Compute(Account &account, not_null<PeerData*> peer) {
++	const auto &s = G().settings;
++	const auto key = peer->id.value;
++	auto in = TrustRules::Input();
++	if (const auto user = peer->asUser()) {
++		in.kind = UserKind(
++			user->isSelf(),
++			peerToUser(user->id).bare,
++			user->isBot());
++		in.contact = user->isContact();
++	} else if (const auto chat = peer->asChat()) {
++		in.kind = Kind::Group;
++		in.creatorOrAdmin = chat->amCreator();
++	} else if (const auto channel = peer->asChannel()) {
++		in.kind = channel->isMegagroup() ? Kind::Group : Kind::Channel;
++		in.creatorOrAdmin = channel->amCreator()
++			|| (channel->isBroadcast() && channel->hasAdminRights());
++	}
++	if (const auto i = account.marks.find(key); i != end(account.marks)) {
++		in.mark = i->second.first;
++		in.markedAt = i->second.second;
++	} else {
++		// Stock Settings -> Advanced -> Automatic media download lists:
++		// "Never" reads as never-trust, "Always" as a hand mark.
++		using Override = Data::AutoDownload::Override;
++		const auto override = peer->session().settings().autoDownload(
++		).peerOverride(peer->id);
++		if (override == Override::ForceDeny) {
++			in.mark = Mark::Never;
++		} else if (override == Override::ForceAllow) {
++			auto &seen = account.stockSeen[key];
++			if (!seen) {
++				seen = base::unixtime::now();
++				ScheduleSave(account);
++			}
++			in.mark = Mark::Trusted;
++			in.markedAt = seen;
++		}
++	}
++	in.activeDays = ActiveDays(account, key, s.d);
++	in.now = base::unixtime::now();
++	return Decide(in, TrustRules::Settings{
++		.on = s.on,
++		.n = s.n,
++		.d = s.d,
++		.grace = s.grace,
++		.admin = s.admin,
++		.contacts = s.contacts,
++	});
++}
++
++[[nodiscard]] Why Verdict(not_null<PeerData*> peer) {
++	if (!G().settings.on) {
++		return Why::Off;
++	}
++	auto &account = AccountFor(&peer->session());
++	const auto now = crl::now();
++	if (now - account.verdictsAt > kVerdictTtl) {
++		account.verdicts.clear();
++		account.verdictsAt = now;
++	}
++	const auto i = account.verdicts.find(peer);
++	if (i != end(account.verdicts)) {
++		return i->second;
++	}
++	const auto result = Compute(account, peer);
++	account.verdicts.emplace(peer, result);
++	return result;
++}
++
++void ClearVerdicts() {
++	for (const auto &[key, account] : G().accounts) {
++		account->verdicts.clear();
++	}
++}
++
++// Re-run the gates: loads stock would do now, and a repaint of the open
++// history so draw() re-checks autoplay and stickers.
++void Refresh(not_null<PeerData*> peer) {
++	auto &owner = peer->owner();
++	owner.photoLoadSettingsChanged();
++	owner.documentLoadSettingsChanged();
++	if (const auto history = owner.historyLoaded(peer.get())) {
++		for (const auto &block : history->blocks) {
++			for (const auto &view : block->messages) {
++				owner.requestViewRepaint(view.get());
++			}
++		}
++	}
++}
++
++// Settings are global: every account re-runs its gates.
++void RefreshAll() {
++	for (const auto &entry : Core::App().domain().accounts()) {
++		if (entry.account->sessionExists()) {
++			auto &owner = entry.account->session().data();
++			owner.photoLoadSettingsChanged();
++			owner.documentLoadSettingsChanged();
++		}
++	}
++	if (const auto window = Core::App().activeWindow()) {
++		if (const auto controller = window->sessionController()) {
++			if (const auto peer = controller->activeChatCurrent().peer()) {
++				Refresh(peer);
++			}
++		}
++	}
++}
++
++void SetMark(not_null<PeerData*> peer, Mark mark) {
++	auto &account = AccountFor(&peer->session());
++	account.marks[peer->id.value] = { mark, int64(base::unixtime::now()) };
++	account.verdicts.clear();
++	SaveAccount(account);
++	G().changes.fire({});
++	Refresh(peer);
++}
++
++// First refusal in the chat the active window shows, once per peer.
++void MaybeToast(not_null<PeerData*> peer) {
++	auto &g = G();
++	if (g.toasted.contains(peer)) {
++		return;
++	}
++	const auto window = Core::App().activeWindow();
++	const auto controller = window ? window->sessionController() : nullptr;
++	if (!controller
++		|| (&controller->session() != &peer->session())
++		|| (controller->activeChatCurrent().peer() != peer.get())) {
++		return;
++	}
++	g.toasted.emplace(peer);
++	const auto session = base::make_weak(&peer->session());
++	const auto peerId = peer->id;
++	crl::on_main([weak = base::make_weak(controller), session, peerId] {
++		const auto strong = weak.get();
++		if (!strong) {
++			return;
++		}
++		auto text = TextWithEntities{ u"Media here waits for a tap. "_q };
++		text.append(Ui::Text::Link(u"Trust this chat"_q));
++		strong->showToast(Ui::Toast::Config{
++			.text = std::move(text),
++			.filter = [=](const ClickHandlerPtr &, Qt::MouseButton button) {
++				if (button != Qt::LeftButton) {
++					return false;
++				}
++				if (const auto strong = session.get()) {
++					if (const auto peer = strong->data().peerLoaded(peerId)) {
++						SetMark(peer, Mark::Trusted);
++					}
++				}
++				return true;
++			},
++		});
++	});
++}
++
++[[nodiscard]] bool GateOn() {
++	const auto &s = G().settings;
++	return s.on && s.tap;
++}
++
++} // namespace
++
++TrustSettings Trust() {
++	return G().settings;
++}
++
++void SetTrust(const TrustSettings &settings) {
++	G().settings = settings;
++	SaveSettings(settings);
++	ClearVerdicts();
++	G().changes.fire({});
++	RefreshAll();
++}
++
++bool TrustOn() {
++	return G().settings.on;
++}
++
++bool Allows(not_null<const HistoryItem*> item) {
++	if (!GateOn()) {
++		return true;
++	}
++	const auto peer = item->history()->peer;
++	const auto verdict = Verdict(peer);
++	if (verdict == Why::Never) {
++		return false; // rule 1 first: beats rules 2 and 8, and no toast
++	} else if (IsTrusted(verdict)) {
++		return true;
++	} else if (item->out() && !item->Get<HistoryMessageForwarded>()) {
++		return true; // rule 2: your own message, not a forward
++	} else if (G().settings.sender && !peer->isUser() && !peer->isBroadcast()) {
++		// Rule 8: a trusted person's message inside a group.
++		const auto from = item->from();
++		if (from != peer && from->isUser() && !from->isBot()) {
++			const auto why = Verdict(from);
++			if (why == Why::Grace
++				|| why == Why::Active
++				|| why == Why::ActiveContact) {
++				return true;
++			}
++		}
++	}
++	MaybeToast(peer);
++	return false;
++}
++
++bool AllowsPeer(not_null<PeerData*> peer) {
++	if (!GateOn()) {
++		return true;
++	} else if (CurrentItem && CurrentItem->history()->peer == peer) {
++		return Allows(not_null<const HistoryItem*>(CurrentItem));
++	}
++	const auto verdict = Verdict(peer);
++	if (IsTrusted(verdict)) {
++		return true;
++	} else if (verdict != Why::Never) {
++		MaybeToast(peer);
++	}
++	return false;
++}
++
++bool CallP2PAllowed(not_null<UserData*> user) {
++	const auto &s = G().settings;
++	return !s.on || !s.relay || IsTrusted(Verdict(user));
++}
++
++TrustItemScope::TrustItemScope(const HistoryItem *item)
++: _previous(CurrentItem) {
++	CurrentItem = item;
++}
++
++TrustItemScope::~TrustItemScope() {
++	CurrentItem = _previous;
++}
++
++void NoteIncoming(not_null<HistoryItem*> item) {
++	const auto peer = item->history()->peer;
++	if (item->out()
++		|| !peer->isUser()
++		|| peer->isSelf()
++		|| item->isService()
++		|| !item->isRegular()) {
++		return;
++	}
++	const auto day = int(
++		QDateTime::fromSecsSinceEpoch(item->date()).date().toJulianDay());
++	const auto today = Today();
++	if (day < today - kKeepDays || day > today + 1) {
++		return;
++	}
++	auto &account = AccountFor(&peer->session());
++	auto &days = account.days[peer->id.value];
++	const auto i = ranges::lower_bound(days, day);
++	if (i != end(days) && *i == day) {
++		return;
++	}
++	days.insert(i, day);
++	const auto old = ranges::lower_bound(days, today - kKeepDays);
++	days.erase(begin(days), old);
++	account.verdicts.remove(peer);
++	ScheduleSave(account);
++}
++
++bool TrustMenuShown(not_null<PeerData*> peer) {
++	const auto why = Verdict(peer);
++	return (why != Why::Off) && (why != Why::Own);
++}
++
++QString TrustMenuText(not_null<PeerData*> peer) {
++	switch (Verdict(peer)) {
++	case Why::Never: return u"Never trusted · Clear"_q;
++	case Why::Hand:
++	case Why::Grace:
++	case Why::Active: return u"Trusted (you) · Untrust"_q;
++	case Why::Admin: return u"Trusted (admin) · Never trust"_q;
++	case Why::ActiveContact:
++		return u"Trusted (active contact) · Never trust"_q;
++	case Why::Dormant: return u"Dormant (you) · Trust again"_q;
++	default: return u"Untrusted · Trust this chat"_q;
++	}
++}
++
++void TrustMenuClicked(not_null<PeerData*> peer) {
++	switch (Verdict(peer)) {
++	case Why::Never:
++	case Why::Hand:
++	case Why::Grace:
++	case Why::Active: SetMark(peer, Mark::None); break;
++	case Why::Admin:
++	case Why::ActiveContact: SetMark(peer, Mark::Never); break;
++	case Why::Off:
++	case Why::Own: break;
++	default: SetMark(peer, Mark::Trusted); break;
++	}
++}
++
++rpl::producer<QString> TrustSummaryValue() {
++	return G().changes.events_starting_with(
++		rpl::empty_value()
++	) | rpl::map([] {
++		const auto &s = G().settings;
++		return s.on
++			? (u"On · %1 days in %2"_q.arg(s.n).arg(s.d))
++			: u"Off"_q;
++	});
++}
++
++void TrustSettingsBox(
++		not_null<Ui::GenericBox*> box,
++		not_null<Main::Session*> session) {
++	const auto s = G().settings;
++	box->setTitle(rpl::single(u"Media trust"_q));
++	const auto check = [&](const QString &text, bool value) {
++		const auto result = box->addRow(
++			object_ptr<Ui::Checkbox>(box, text, value));
++		box->addSkip(st::boxLittleSkip);
++		return result;
++	};
++	const auto number = [&](const QString &label, int value, int max) {
++		box->addRow(object_ptr<Ui::FlatLabel>(box, label, st::boxLabel));
++		// NumberInput is a QLineEdit, not an RpWidget: wrap it for addRow.
++		const auto wrap = box->addRow(object_ptr<Ui::FixedHeightWidget>(
++			box,
++			st::defaultInputField.heightMin));
++		const auto field = Ui::CreateChild<Ui::NumberInput>(
++			wrap,
++			st::defaultInputField,
++			rpl::single(QString()),
++			QString::number(value),
++			max);
++		wrap->widthValue() | rpl::on_next([=](int width) {
++			field->move(0, 0);
++			field->resize(width, field->height());
++			wrap->resize(width, field->height());
++		}, wrap->lifetime());
++		return field;
++	};
++	const auto on = check(u"Trust model on"_q, s.on);
++	const auto tap = check(u"Untrusted chats: tap to load"_q, s.tap);
++	const auto relay = check(u"Untrusted calls: relay only"_q, s.relay);
++	const auto admin = check(u"Trust groups and channels I run"_q, s.admin);
++	const auto contacts = check(u"Trust active contacts"_q, s.contacts);
++	const auto sender = check(u"Trust trusted senders in groups"_q, s.sender);
++	const auto n = number(u"Active days needed (1-30)"_q, s.n, 30);
++	const auto d = number(u"Counted over the last days (7-365)"_q, s.d, 365);
++	const auto grace = number(
++		u"A hand mark trusts for days (0-365)"_q,
++		s.grace,
++		365);
++	box->addButton(tr::lng_settings_save(), [=] {
++		const auto read = [](Ui::NumberInput *field, int was, int lo, int hi) {
++			auto ok = false;
++			const auto value = field->getLastText().toInt(&ok);
++			return ok ? std::clamp(value, lo, hi) : was;
++		};
++		auto now = G().settings;
++		now.on = on->checked();
++		now.tap = tap->checked();
++		now.relay = relay->checked();
++		now.admin = admin->checked();
++		now.contacts = contacts->checked();
++		now.sender = sender->checked();
++		now.n = read(n, now.n, 1, 30);
++		now.d = read(d, now.d, 7, 365);
++		now.grace = read(grace, now.grace, 0, 365);
++		SetTrust(now);
++		session->data().photoLoadSettingsChanged();
++		session->data().documentLoadSettingsChanged();
++		box->closeBox();
++	});
++	box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
++}
++
++} // namespace Custom
+diff --git a/Telegram/SourceFiles/custom/custom_trust.h b/Telegram/SourceFiles/custom/custom_trust.h
+new file mode 100644
+index 00000000..feb9715d
+--- /dev/null
++++ b/Telegram/SourceFiles/custom/custom_trust.h
+@@ -0,0 +1,79 @@
++// telegram-custom: media trust model (docs/trust.md). Media from chats you
++// have not come to trust waits for a tap: no automatic downloads, no network
++// thumbnails, no autoplay, no story preload, no direct-URL web documents,
++// calls relay-only. Global settings in custom.json, per-account marks and
++// activity log in <workdir>/trust_<account>.json. Per device, never synced.
++#pragma once
++
++#include "custom/custom_trust_rules.h"
++
++class PeerData;
++class UserData;
++class HistoryItem;
++
++namespace Main {
++class Session;
++} // namespace Main
++
++namespace Ui {
++class GenericBox;
++} // namespace Ui
++
++namespace Custom {
++
++struct TrustSettings {
++	bool on = true;
++	int n = 3;
++	int d = 90;
++	int grace = 90;
++	bool admin = true; // rule 4
++	bool contacts = true; // rule 7
++	bool sender = false; // rule 8
++	bool tap = true; // untrusted chats: tap to load
++	bool relay = true; // untrusted calls: relay only
++};
++
++[[nodiscard]] TrustSettings Trust();
++void SetTrust(const TrustSettings &settings);
++
++// Trust model on: direct-URL web documents never load.
++[[nodiscard]] bool TrustOn();
++
++// May this message's media load, play or preview automatically?
++[[nodiscard]] bool Allows(not_null<const HistoryItem*> item);
++
++// Gates that only see a peer: the item of an enclosing TrustItemScope
++// when it belongs to that peer, else the chat's verdict.
++[[nodiscard]] bool AllowsPeer(not_null<PeerData*> peer);
++
++// May a 1:1 call with this user go peer-to-peer?
++[[nodiscard]] bool CallP2PAllowed(not_null<UserData*> user);
++
++class TrustItemScope final {
++public:
++	explicit TrustItemScope(const HistoryItem *item);
++	~TrustItemScope();
++
++	TrustItemScope(const TrustItemScope &) = delete;
++	TrustItemScope &operator=(const TrustItemScope &) = delete;
++
++private:
++	const HistoryItem *_previous = nullptr;
++
++};
++
++// Activity feed: every message item as it is created (history.cpp).
++void NoteIncoming(not_null<HistoryItem*> item);
++
++// Chat menu: state-first label, and its action.
++[[nodiscard]] bool TrustMenuShown(not_null<PeerData*> peer);
++[[nodiscard]] QString TrustMenuText(not_null<PeerData*> peer);
++void TrustMenuClicked(not_null<PeerData*> peer);
++
++// Settings -> Advanced -> Automatic media download -> Media trust.
++[[nodiscard]] rpl::producer<QString> TrustSummaryValue();
++void TrustSettingsBox(
++	not_null<Ui::GenericBox*> box,
++	not_null<Main::Session*> session);
++
++} // namespace Custom
+diff --git a/Telegram/SourceFiles/custom/custom_trust_rules.h b/Telegram/SourceFiles/custom/custom_trust_rules.h
+new file mode 100644
+index 00000000..45f3c0ec
+--- /dev/null
++++ b/Telegram/SourceFiles/custom/custom_trust_rules.h
+@@ -0,0 +1,114 @@
++// telegram-custom: the media trust rule table (docs/trust.md section 1),
++// pure and dependency-free so CI can unit-test it without building the app.
++#pragma once
++
++#include <cstdint>
++
++namespace Custom::TrustRules {
++
++enum class Kind : std::uint8_t {
++	Self, // Saved Messages
++	Service, // the Telegram service account (777000)
++	Person,
++	Bot,
++	Group, // basic groups and supergroups
++	Channel, // broadcast channels
++};
++
++enum class Mark : std::uint8_t {
++	None = 0,
++	Trusted = 1,
++	Never = 2,
++};
++
++enum class Why : std::uint8_t {
++	Off, // trust model off: stock everywhere
++	Never, // rule 1
++	Own, // rule 2: Saved Messages, service account
++	Hand, // rule 3: group, channel or bot marked by hand
++	Admin, // rule 4: group you created, channel you created or admin
++	Grace, // rule 5: person marked less than `grace` days ago
++	Active, // rule 6: marked person with enough active days
++	ActiveContact, // rule 7
++	Dormant, // marked person below the threshold: untrusted until active
++	Untrusted, // rule 9
++};
++
++struct Settings {
++	bool on = true;
++	int n = 3; // active days needed
++	int d = 90; // window, days
++	int grace = 90; // days a fresh hand mark trusts on its own
++	bool admin = true; // rule 4
++	bool contacts = true; // rule 7
++};
++
++struct Input {
++	Kind kind = Kind::Person;
++	bool creatorOrAdmin = false; // rule 4 scope, computed by the caller
++	bool contact = false;
++	Mark mark = Mark::None;
++	std::int64_t markedAt = 0; // unixtime
++	int activeDays = 0; // active days within the last `d`
++	std::int64_t now = 0; // unixtime
++};
++
++// Only the real service account (777000) is Service: tdesktop's
++// isServiceUser() is "id divisible by 1000", which ordinary accounts hit.
++[[nodiscard]] constexpr Kind UserKind(
++		bool self,
++		std::uint64_t userId,
++		bool bot) {
++	return self
++		? Kind::Self
++		: (userId == 777000)
++		? Kind::Service
++		: bot
++		? Kind::Bot
++		: Kind::Person;
++}
++
++[[nodiscard]] constexpr bool IsTrusted(Why why) {
++	switch (why) {
++	case Why::Off:
++	case Why::Own:
++	case Why::Hand:
++	case Why::Admin:
++	case Why::Grace:
++	case Why::Active:
++	case Why::ActiveContact: return true;
++	default: return false;
++	}
++}
++
++// Rules 0-7 and 9, first match wins. Rule 2's own-message clause and
++// rule 8 (trusted sender in a group) are per message, applied by the caller.
++[[nodiscard]] constexpr Why Decide(const Input &in, const Settings &s) {
++	const auto person = (in.kind == Kind::Person);
++	const auto chat = (in.kind == Kind::Group) || (in.kind == Kind::Channel);
++	if (!s.on) {
++		return Why::Off;
++	} else if (in.mark == Mark::Never) {
++		return Why::Never;
++	} else if (in.kind == Kind::Self || in.kind == Kind::Service) {
++		return Why::Own;
++	} else if (!person && in.mark == Mark::Trusted) {
++		return Why::Hand;
++	} else if (chat && s.admin && in.creatorOrAdmin) {
++		return Why::Admin;
++	} else if (person && in.mark == Mark::Trusted) {
++		if (in.now - in.markedAt < std::int64_t(s.grace) * 86400) {
++			return Why::Grace;
++		} else if (in.activeDays >= s.n) {
++			return Why::Active;
++		}
++	}
++	if (person && s.contacts && in.contact && in.activeDays >= s.n) {
++		return Why::ActiveContact;
++	} else if (person && in.mark == Mark::Trusted) {
++		return Why::Dormant;
++	}
++	return Why::Untrusted;
++}
++
++} // namespace Custom::TrustRules
+diff --git a/Telegram/SourceFiles/data/data_auto_download.cpp b/Telegram/SourceFiles/data/data_auto_download.cpp
+index f11ab7c6..cfdd6f78 100644
+--- a/Telegram/SourceFiles/data/data_auto_download.cpp
++++ b/Telegram/SourceFiles/data/data_auto_download.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_auto_download.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "data/data_peer.h"
+ #include "data/data_photo.h"
+@@ -371,6 +372,9 @@ bool Should(
+ 	if (document->sticker()) {
+ 		return true;
+ 	}
++	if (!Custom::AllowsPeer(peer)) { // telegram-custom
++		return false;
++	}
+ 	const auto override = data.peerOverride(peer->id);
+ 	if (override == Override::ForceDeny) {
+ 		return false;
+@@ -407,6 +411,9 @@ bool Should(
+ 		const Full &data,
+ 		not_null<PeerData*> peer,
+ 		not_null<PhotoData*> photo) {
++	if (!Custom::AllowsPeer(peer)) { // telegram-custom
++		return false;
++	}
+ 	const auto override = data.peerOverride(peer->id);
+ 	if (override == Override::ForceDeny) {
+ 		return false;
+@@ -430,6 +437,9 @@ bool ShouldAutoPlay(
+ 	if (document->sticker()) {
+ 		return true;
+ 	}
++	if (!Custom::AllowsPeer(peer)) { // telegram-custom
++		return false;
++	}
+ 	const auto override = data.peerOverride(peer->id);
+ 	if (override == Override::ForceDeny) {
+ 		return false;
+@@ -453,6 +463,9 @@ bool ShouldAutoPlay(
+ 	if (!photo->hasVideo()) {
+ 		return false;
+ 	}
++	if (!Custom::AllowsPeer(peer)) { // telegram-custom
++		return false;
++	}
+ 	const auto override = data.peerOverride(peer->id);
+ 	if (override == Override::ForceDeny) {
+ 		return false;
+diff --git a/Telegram/SourceFiles/data/data_document.cpp b/Telegram/SourceFiles/data/data_document.cpp
+index 567643f2..f8eccf53 100644
+--- a/Telegram/SourceFiles/data/data_document.cpp
++++ b/Telegram/SourceFiles/data/data_document.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_document.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "data/data_document_resolver.h"
+ #include "data/data_session.h"
+@@ -1295,6 +1296,9 @@ void DocumentData::save(
+ 				autoLoading,
+ 				cacheTag());
+ 		} else if (!_access && !_url.isEmpty()) {
++			if (Custom::TrustOn()) {
++				return; // telegram-custom: direct URL, fetched from your own IP
++			}
+ 			_loader = std::make_unique<webFileLoader>(
+ 				&session(),
+ 				_url,
+diff --git a/Telegram/SourceFiles/data/data_document_media.cpp b/Telegram/SourceFiles/data/data_document_media.cpp
+index e6419e7c..145633e2 100644
+--- a/Telegram/SourceFiles/data/data_document_media.cpp
++++ b/Telegram/SourceFiles/data/data_document_media.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_document_media.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "data/data_document.h"
+ #include "data/data_document_resolver.h"
+@@ -303,6 +304,7 @@ void DocumentMedia::checkStickerLarge() {
+ void DocumentMedia::automaticLoad(
+ 		Data::FileOrigin origin,
+ 		const HistoryItem *item) {
++	Custom::TrustItemScope trust(item); // telegram-custom
+ 	if (_owner->status != FileReady
+ 		|| loaded()
+ 		|| _owner->uploading()
+diff --git a/Telegram/SourceFiles/data/data_media_types.cpp b/Telegram/SourceFiles/data/data_media_types.cpp
+index 3f64b411..61f02340 100644
+--- a/Telegram/SourceFiles/data/data_media_types.cpp
++++ b/Telegram/SourceFiles/data/data_media_types.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_media_types.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "base/random.h"
+ #include "boxes/send_credits_box.h" // CreditsEmoji.
+@@ -246,7 +247,9 @@ template <typename MediaType>
+ 			readyCacheKey,
+ 		};
+ 	}
+-	document->loadThumbnail(item->fullId());
++	if (Custom::Allows(item)) { // telegram-custom
++		document->loadThumbnail(item->fullId());
++	}
+ 	const auto simple = SimpleCacheKey(radius, spoiler);
+ 	if (const auto blurred = media->thumbnailInline()) {
+ 		return { PreparePreviewImage(blurred, radius, spoiler), simple };
+diff --git a/Telegram/SourceFiles/data/data_photo_media.cpp b/Telegram/SourceFiles/data/data_photo_media.cpp
+index fc685bfb..c2e7d3fc 100644
+--- a/Telegram/SourceFiles/data/data_photo_media.cpp
++++ b/Telegram/SourceFiles/data/data_photo_media.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_photo_media.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "data/data_file_origin.h"
+ #include "data/data_session.h"
+@@ -154,6 +155,9 @@ bool PhotoMedia::autoLoadThumbnailAllowed(not_null<PeerData*> peer) const {
+ 	if (loaded() || _owner->cancelled()) {
+ 		return false;
+ 	}
++	if (!Custom::AllowsPeer(peer)) { // telegram-custom
++		return false;
++	}
+ 	return _owner->hasExact(PhotoSize::Small)
+ 		|| _owner->hasExact(PhotoSize::Thumbnail)
+ 		|| AutoDownload::Should(
+@@ -166,6 +170,7 @@ void PhotoMedia::automaticLoad(
+ 		FileOrigin origin,
+ 		const HistoryItem *item) {
+ 	if (item) {
++		Custom::TrustItemScope trust(item); // telegram-custom
+ 		automaticLoad(origin, item->history()->peer);
+ 	}
+ }
+diff --git a/Telegram/SourceFiles/data/data_reply_preview.cpp b/Telegram/SourceFiles/data/data_reply_preview.cpp
+index e31f30f3..ed947f04 100644
+--- a/Telegram/SourceFiles/data/data_reply_preview.cpp
++++ b/Telegram/SourceFiles/data/data_reply_preview.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_reply_preview.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "data/data_file_origin.h"
+ #include "data/data_document.h"
+@@ -75,6 +76,8 @@ Image *ReplyPreview::image(
+ 		if (!image || (!_good && _document->hasThumbnail())) {
+ 			if (!_documentMedia) {
+ 				_documentMedia = _document->createMediaView();
++			}
++			if (Custom::AllowsPeer(context)) { // telegram-custom: retried
+ 				_documentMedia->thumbnailWanted(origin);
+ 			}
+ 			const auto thumbnail = _documentMedia->thumbnail();
+@@ -107,7 +110,8 @@ Image *ReplyPreview::image(
+ 				_photoMedia = _photo->createMediaView();
+ 			}
+ 			using Size = PhotoSize;
+-			const auto loadThumbnail = inlineThumbnailBytes.isEmpty()
++			const auto loadThumbnail = (inlineThumbnailBytes.isEmpty()
++					&& Custom::AllowsPeer(context)) // telegram-custom
+ 				|| (!spoiler
+ 					&& _photoMedia->autoLoadThumbnailAllowed(context));
+ 			if (loadThumbnail) {
+diff --git a/Telegram/SourceFiles/data/data_stories.cpp b/Telegram/SourceFiles/data/data_stories.cpp
+index 728027e3..96888d29 100644
+--- a/Telegram/SourceFiles/data/data_stories.cpp
++++ b/Telegram/SourceFiles/data/data_stories.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "data/data_stories.h"
++#include "custom/custom_trust.h" // telegram-custom
+ #include "custom/custom_settings.h" // telegram-custom
+ 
+ #include "base/unixtime.h"
+@@ -2622,6 +2623,11 @@ void Stories::startPreloading(not_null<Story*> story) {
+ 	Expects(!_preloaded.contains(story->fullId()));
+ 
+ 	const auto id = story->fullId();
++	if (!Custom::AllowsPeer(story->peer()) // telegram-custom
++		&& !ranges::contains(_toPreloadViewer, id)) {
++		preloadFinished(id, false);
++		return;
++	}
+ 	auto preloading = std::make_unique<StoryPreload>(story, [=] {
+ 		_preloading = nullptr;
+ 		preloadFinished(id, true);
+diff --git a/Telegram/SourceFiles/history/history.cpp b/Telegram/SourceFiles/history/history.cpp
+index e6225f53..ca786b7b 100644
+--- a/Telegram/SourceFiles/history/history.cpp
++++ b/Telegram/SourceFiles/history/history.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "history/history.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "history/view/history_view_element.h"
+ #include "history/view/history_view_item_preview.h"
+@@ -592,6 +593,7 @@ not_null<HistoryItem*> History::createItem(
+ 	const auto result = message.match([&](const auto &data) {
+ 		return makeMessage(id, data, localFlags);
+ 	});
++	Custom::NoteIncoming(result); // telegram-custom
+ 	if (newMessage && result->out() && result->isRegular()) {
+ 		session().topPeers().increment(peer, result->date());
+ 		if (result->starsPaid()) {
+diff --git a/Telegram/SourceFiles/history/view/media/history_view_document.cpp b/Telegram/SourceFiles/history/view/media/history_view_document.cpp
+index 8ef882c5..b59c7131 100644
+--- a/Telegram/SourceFiles/history/view/media/history_view_document.cpp
++++ b/Telegram/SourceFiles/history/view/media/history_view_document.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "history/view/media/history_view_document.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "base/random.h"
+ #include "lang/lang_keys.h"
+@@ -452,7 +453,9 @@ void Document::createComponents() {
+ 	} else {
+ 		mask |= HistoryDocumentNamed::Bit();
+ 		if (_data->hasThumbnail() && !_data->isSong()) {
+-			_data->loadThumbnail(_realParent->fullId());
++			if (Custom::Allows(_realParent)) { // telegram-custom
++				_data->loadThumbnail(_realParent->fullId());
++			}
+ 			mask |= HistoryDocumentThumbed::Bit();
+ 		} else if (_data->isSvgImage()) {
+ 			mask |= HistoryDocumentThumbed::Bit();
+@@ -1194,7 +1197,9 @@ void Document::ensureDataMediaCreated() const {
+ 	if (Get<HistoryDocumentThumbed>()
+ 		|| _data->isSongWithCover()
+ 		|| _transcribedRound) {
+-		_dataMedia->thumbnailWanted(_realParent->fullId());
++		if (Custom::Allows(_realParent)) { // telegram-custom
++			_dataMedia->thumbnailWanted(_realParent->fullId());
++		}
+ 	}
+ 	if (_data->isSvgImage()) {
+ 		_dataMedia->goodThumbnailWanted();
+diff --git a/Telegram/SourceFiles/history/view/media/history_view_gif.cpp b/Telegram/SourceFiles/history/view/media/history_view_gif.cpp
+index 63578275..53e5ba04 100644
+--- a/Telegram/SourceFiles/history/view/media/history_view_gif.cpp
++++ b/Telegram/SourceFiles/history/view/media/history_view_gif.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "history/view/media/history_view_gif.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "apiwrap.h"
+ #include "api/api_transcribes.h"
+@@ -255,10 +256,11 @@ Gif::Gif(
+ 	} else if (_videoCover) {
+ 		if (_videoCover->inlineThumbnailBytes().isEmpty()
+ 			&& (_videoCover->hasExact(Data::PhotoSize::Small)
+-				|| _videoCover->hasExact(Data::PhotoSize::Thumbnail))) {
++				|| _videoCover->hasExact(Data::PhotoSize::Thumbnail))
++			&& Custom::Allows(realParent)) { // telegram-custom
+ 			_videoCover->load(Data::PhotoSize::Small, realParent->fullId());
+ 		}
+-	} else {
++	} else if (Custom::Allows(realParent)) { // telegram-custom
+ 		_data->loadThumbnail(realParent->fullId());
+ 		if (!autoplayEnabled()) {
+ 			_data->loadVideoThumbnail(realParent->fullId());
+@@ -574,6 +576,7 @@ bool Gif::autoplayEnabled() const {
+ 	if (_realParent->isSponsored()) {
+ 		return true;
+ 	}
++	Custom::TrustItemScope trust(_realParent); // telegram-custom
+ 	return Data::AutoDownload::ShouldAutoPlay(
+ 		_data->session().settings().autoDownload(),
+ 		_realParent->history()->peer,
+@@ -1207,7 +1210,7 @@ void Gif::validateThumbCache(
+ 		: _videoCoverMedia
+ 		? nullptr
+ 		: _dataMedia->thumbnail();
+-	if (!normal) {
++	if (!normal && Custom::Allows(_realParent)) { // telegram-custom
+ 		if (_videoCoverMedia) {
+ 			_videoCover->load(Data::PhotoSize::Small, _realParent->fullId());
+ 		} else {
+@@ -2039,7 +2042,9 @@ void Gif::ensureDataMediaCreated() const {
+ void Gif::dataMediaCreated() const {
+ 	Expects(_dataMedia != nullptr);
+ 
+-	if (_videoCoverMedia) {
++	if (!Custom::Allows(_realParent)) {
++		// telegram-custom: untrusted chat, nothing from the network
++	} else if (_videoCoverMedia) {
+ 		_videoCoverMedia->wanted(
+ 			Data::PhotoSize::Large,
+ 			_realParent->fullId());
+diff --git a/Telegram/SourceFiles/history/view/media/history_view_sticker.cpp b/Telegram/SourceFiles/history/view/media/history_view_sticker.cpp
+index 4ef4cc7b..a694bb6f 100644
+--- a/Telegram/SourceFiles/history/view/media/history_view_sticker.cpp
++++ b/Telegram/SourceFiles/history/view/media/history_view_sticker.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "history/view/media/history_view_sticker.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "base/options.h"
+ #include "boxes/sticker_set_box.h"
+@@ -101,7 +102,8 @@ Sticker::Sticker(
+ 		dataMediaCreated();
+ 	} else {
+ 		_data->loadThumbnail(parent->data()->fullId());
+-		if (hasPremiumEffect()) {
++		if (hasPremiumEffect()
++			&& Custom::Allows(parent->data())) { // telegram-custom
+ 			_data->loadVideoThumbnail(parent->data()->fullId());
+ 		}
+ 	}
+@@ -187,6 +189,12 @@ bool Sticker::readyToDrawAnimationFrame() {
+ 	}
+ 
+ 	ensureDataMediaCreated();
++	if (sticker->isAnimated()
++		&& _diceIndex < 0
++		&& !_emojiSticker
++		&& !Custom::Allows(_parent->data())) {
++		return false; // telegram-custom: untrusted chat, keep the thumbnail
++	}
+ 	_dataMedia->checkStickerLarge();
+ 	const auto loaded = _dataMedia->loaded();
+ 	const auto waitingForPremium = hasPremiumEffect()
+@@ -578,7 +586,8 @@ void Sticker::dataMediaCreated() const {
+ 	if (_dataMedia->thumbnailPath().isEmpty()) {
+ 		_dataMedia->thumbnailWanted(_parent->data()->fullId());
+ 	}
+-	if (hasPremiumEffect()) {
++	if (hasPremiumEffect()
++		&& Custom::Allows(_parent->data())) { // telegram-custom
+ 		_data->loadVideoThumbnail(_parent->data()->fullId());
+ 	}
+ 	_parent->history()->owner().registerHeavyViewPart(_parent);
+diff --git a/Telegram/SourceFiles/history/view/media/history_view_web_page.cpp b/Telegram/SourceFiles/history/view/media/history_view_web_page.cpp
+index 882164a3..55335bdb 100644
+--- a/Telegram/SourceFiles/history/view/media/history_view_web_page.cpp
++++ b/Telegram/SourceFiles/history/view/media/history_view_web_page.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "history/view/media/history_view_web_page.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "base/unixtime.h"
+ #include "core/application.h"
+@@ -941,7 +942,9 @@ void WebPage::ensurePhotoMediaCreated() const {
+ 	}
+ 	_photoMedia = _data->photo->createMediaView();
+ 	const auto contextId = _parent->data()->fullId();
+-	_photoMedia->wanted(Data::PhotoSize::Thumbnail, contextId);
++	if (Custom::Allows(_parent->data())) { // telegram-custom
++		_photoMedia->wanted(Data::PhotoSize::Thumbnail, contextId);
++	}
+ 	history()->owner().registerHeavyViewPart(_parent);
+ }
+ 
+diff --git a/Telegram/SourceFiles/iv/markdown/iv_markdown_history_view_media.cpp b/Telegram/SourceFiles/iv/markdown/iv_markdown_history_view_media.cpp
+index 98a765ab..af3da21a 100644
+--- a/Telegram/SourceFiles/iv/markdown/iv_markdown_history_view_media.cpp
++++ b/Telegram/SourceFiles/iv/markdown/iv_markdown_history_view_media.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "iv/markdown/iv_markdown_history_view_media.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "iv/markdown/iv_markdown_article.h"
+ #include "base/unixtime.h"
+@@ -1479,6 +1480,10 @@ bool IvHistoryViewSlideshowBlock::preloadReady(int index) {
+ }
+ 
+ void IvHistoryViewSlideshowBlock::startPreload(int index) {
++	if (!Custom::Allows(_host->item())) { // telegram-custom
++		_preloads[index].ready = true;
++		return;
++	}
+ 	const auto media = _slides[index].get();
+ 	auto &entry = _preloads[index];
+ 	if (const auto photo = media->getPhoto()) {
+diff --git a/Telegram/SourceFiles/settings/sections/settings_advanced.cpp b/Telegram/SourceFiles/settings/sections/settings_advanced.cpp
+index 7fc18f9a..440b7465 100644
+--- a/Telegram/SourceFiles/settings/sections/settings_advanced.cpp
++++ b/Telegram/SourceFiles/settings/sections/settings_advanced.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "settings/sections/settings_advanced.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "settings/settings_common_session.h"
+ 
+@@ -300,6 +301,16 @@ void BuildAutoDownloadSection(SectionBuilder &builder) {
+ 		&st::menuIconChannel,
+ 		Source::Channel,
+ 		{ u"auto"_q, u"download"_q, u"channels"_q, u"media"_q });
++	builder.addButton({ // telegram-custom
++		.id = u"advanced/media_trust"_q,
++		.title = rpl::single(u"Media trust"_q),
++		.icon = { &st::menuIconPermissions },
++		.label = Custom::TrustSummaryValue(),
++		.onClick = [=] {
++			controller->show(Box(Custom::TrustSettingsBox, session));
++		},
++		.keywords = { u"trust"_q, u"media"_q, u"untrusted"_q },
++	});
+ 
+ 	builder.addSkip(st::settingsCheckboxesSkip);
+ }
+diff --git a/Telegram/SourceFiles/ui/image/image_location_factory.cpp b/Telegram/SourceFiles/ui/image/image_location_factory.cpp
+index cda2cad0..a1b307ac 100644
+--- a/Telegram/SourceFiles/ui/image/image_location_factory.cpp
++++ b/Telegram/SourceFiles/ui/image/image_location_factory.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "ui/image/image_location_factory.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "ui/image/image.h"
+ #include "main/main_session.h"
+@@ -318,6 +319,9 @@ ImageLocation FromWebDocument(const MTPWebDocument &document) {
+ 			size.width(),
+ 			size.height());
+ 	}, [](const MTPDwebDocumentNoProxy &data) {
++		if (Custom::TrustOn()) { // telegram-custom: fetched from your own IP
++			return ImageLocation();
++		}
+ 		const auto size = GetSizeForDocument(data.vattributes().v);
+ 
+ 		// We don't use size from WebDocument, because it is not reliable.
+diff --git a/Telegram/SourceFiles/window/section_widget.cpp b/Telegram/SourceFiles/window/section_widget.cpp
+index ed226f42..85846d2f 100644
+--- a/Telegram/SourceFiles/window/section_widget.cpp
++++ b/Telegram/SourceFiles/window/section_widget.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "window/section_widget.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "mainwidget.h"
+ #include "mainwindow.h"
+@@ -65,7 +66,11 @@ struct ResolvedPaper {
+ 		peer,
+ 		Data::PeerUpdate::Flag::ChatWallPaper
+ 	) | rpl::map([=]() -> rpl::producer<const Data::WallPaper*> {
+-		return WallPaperResolved(&peer->owner(), peer->wallPaper());
++		return WallPaperResolved(
++			&peer->owner(),
++			((peer->wallPaperOverriden() || Custom::AllowsPeer(peer)) // telegram-custom
++				? peer->wallPaper()
++				: nullptr));
+ 	}) | rpl::flatten_latest();
+ }
+ 
+diff --git a/Telegram/SourceFiles/window/window_peer_menu.cpp b/Telegram/SourceFiles/window/window_peer_menu.cpp
+index 4a03ba9a..ddfeb45a 100644
+--- a/Telegram/SourceFiles/window/window_peer_menu.cpp
++++ b/Telegram/SourceFiles/window/window_peer_menu.cpp
+@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
+ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+ */
+ #include "window/window_peer_menu.h"
++#include "custom/custom_trust.h" // telegram-custom
+ 
+ #include "base/call_delayed.h"
+ #include "menu/menu_check_item.h"
+@@ -348,6 +349,7 @@ private:
+ 	void addBoostChat();
+ 	void addToggleFee();
+ 	void addSetPersonalChannel();
++	void addToggleTrust(); // telegram-custom
+ 
+ 	[[nodiscard]] bool skipCreateActions() const;
+ 	[[nodiscard]] SendMenu::Details createSendMenuDetails() const;
+@@ -1894,6 +1896,17 @@ void Filler::addVideoChat() {
+ 	});
+ }
+ 
++void Filler::addToggleTrust() { // telegram-custom
++	if (!_peer || !Custom::TrustMenuShown(_peer)) {
++		return;
++	}
++	const auto peer = _peer;
++	_addAction(
++		Custom::TrustMenuText(peer),
++		[=] { Custom::TrustMenuClicked(peer); },
++		&st::menuIconPermissions);
++}
++
+ void Filler::fillContextMenuActions() {
+ 	addNewWindow();
+ 	addUngroup();
+@@ -1932,6 +1945,7 @@ void Filler::fillHistoryActions() {
+ 	addCreateTodoList();
+ 	addThemeEdit();
+ 	addToggleNoForwards();
++	addToggleTrust(); // telegram-custom
+ 	addViewDiscussion();
+ 	addDirectMessages();
+ 	addExportChat();
+-- 
+2.55.0
+
