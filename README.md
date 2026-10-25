@@ -33,6 +33,7 @@ published there with its checksum and the patch list (with line counts) it was b
 | Our build number after the version text (Settings / menu footer, About) | ✓ | ✓ |
 | 8 logged-in accounts, no Premium needed (stock: 3, or 4 / 6 with Premium) | ✓ | ✓ |
 | Photos with different captions each go out as their own message, not an album that hides the captions | ✓ | |
+| Media trust: in chats you have not come to trust, media waits for a tap (no auto-download, network thumbnails, autoplay or story preload) and calls stay on Telegram's relay | | ✓ |
 
 Beyond the patches, the build changes only identity: package / app id, name, a purple icon, its own
 signing key and its own `api_id` (see [`android/customize.sh`](android/customize.sh),

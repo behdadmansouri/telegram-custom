@@ -14,6 +14,7 @@
    separate from the official client, so it needs its own login.
 5. Broken build? `desktop/install.sh --rollback` swaps the previous one back.
 6. **Ghost mode:** ☰ menu → Ghost mode. **Folder counter:** right-click a folder tab → Hide/Show unread counter.
+7. **Media trust:** chat ⋮ menu → the trust line (state first, then the action, e.g. "Untrusted · Trust this chat"). Numbers and switches: Settings → Advanced → Automatic media download → Media trust.
 
 ## 📱 android
 1. **Download:** the repo's **Releases** page, newest "Android" release → the `.apk`. A push to
