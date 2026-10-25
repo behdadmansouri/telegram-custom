@@ -1,5 +1,5 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Bmans <bmans054@uottawa.ca>
+From: telegram-custom <telegram-custom@users.noreply.github.com>
 Date: Wed, 23 Sep 2026 17:12:21 -0400
 Subject: [PATCH] Hide premium custom emoji sets from the picker without
  Premium
@@ -12,10 +12,10 @@ the free part of mixed sets, and the group's emoji set stay.
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-index 7d620f71..2b38c203 100644
+index 4f46a0c5..5a5ea676 100644
 --- a/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
 +++ b/TMessagesProj/src/main/java/org/telegram/ui/Components/EmojiView.java
-@@ -7569,7 +7569,7 @@ public class EmojiView extends FrameLayout implements
+@@ -7655,7 +7655,7 @@ public class EmojiView extends FrameLayout implements
                          pack.expanded = true;
                          emojipacksProcessed.add(pack);
                      }
@@ -24,7 +24,7 @@ index 7d620f71..2b38c203 100644
                          EmojiPack pack = new EmojiPack();
                          pack.index = index++;
                          pack.set = set.set;
-@@ -7613,6 +7613,7 @@ public class EmojiView extends FrameLayout implements
+@@ -7699,6 +7699,7 @@ public class EmojiView extends FrameLayout implements
                          break;
                      }
                  }
