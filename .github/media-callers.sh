@@ -25,7 +25,9 @@ case $platform in
 desktop)
     patterns=('AutoDownload::Should(' 'AutoDownload::ShouldAutoPlay('
         'autoLoadThumbnailAllowed(' 'loadThumbnail(' 'thumbnailWanted('
-        'checkStickerLarge(' 'startPreloading(' 'PlainUrlLocation' 'f_udp_p2p')
+        'checkStickerLarge(' 'startPreloading(' 'PlainUrlLocation' 'f_udp_p2p'
+        'videoThumbnailWanted(' 'loadVideoThumbnail(' 'VideoPreload'
+        'setContentUrl(' 'webFileLoader')
     paths=(Telegram/SourceFiles) ;;
 android)
     patterns=('canDownloadMedia(' 'canDownloadMediaType(' 'canPreloadStories('
