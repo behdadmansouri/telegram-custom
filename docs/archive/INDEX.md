@@ -11,3 +11,4 @@ Evidence: dated research and readouts, frozen once read. Conclusions live in `do
 | 2026-10-25-whats-custom-critique-1.md | critique round 1 of docs/whats-custom.md: anchors checked at 0aae9598/v7.2.5 and origin/batch-2, 9 objections, verdict at the end | 2026-10-25 |
 | 2026-10-25-whats-custom-sheet-day.png | contact sheet preview of the 12 What's custom glyph pairs, day theme (made by .github/whats-custom-sheet.py) | 2026-10-25 |
 | 2026-10-25-whats-custom-sheet-night.png | the same sheet, night theme | 2026-10-25 |
+| 2026-10-25-trust-desktop-review.md | code review of desktop patch 0009 (media trust): 15 findings, 3 high | 2026-10-25 |
