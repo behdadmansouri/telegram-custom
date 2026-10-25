@@ -37,6 +37,7 @@
 6. **Send and move to trash:** pick photos → long-press send → **Send and move to trash**. After
    everything has uploaded, Android asks once to move the originals to its trash. Nothing is touched
    if any send fails. Android 11+.
+7. **Media trust:** chat ⋮ menu → the trust line (state first, then the action, e.g. "Untrusted · Trust this chat"); the first tap on a blurred item loads it. Numbers and switches: Settings → Media trust.
 
 ## 🔁 updating from upstream
 Automatic: the **upstream** workflow runs daily (Actions → upstream → Run workflow to run it now). A

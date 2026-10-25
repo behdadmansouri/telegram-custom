@@ -26,7 +26,7 @@ Rules are pure (TrustRules) and unit-tested by CI with plain javac.
  .../org/telegram/messenger/ImageReceiver.java |   8 +
  .../telegram/messenger/MessagesStorage.java   |   2 +
  .../telegram/messenger/RichMessageLayout.java |   3 +
- .../telegram/messenger/TrustController.java   | 741 ++++++++++++++++++
+ .../telegram/messenger/TrustController.java   | 769 ++++++++++++++++++
  .../org/telegram/messenger/TrustRules.java    | 123 +++
  .../telegram/messenger/voip/VoIPService.java  |  10 +-
  .../telegram/ui/Cells/ChatMessageCell.java    |   5 +
@@ -35,7 +35,7 @@ Rules are pure (TrustRules) and unit-tested by CI with plain javac.
  .../org/telegram/ui/SettingsActivity.java     |   4 +
  .../ui/Stories/StoriesController.java         |   3 +
  .../telegram/ui/TrustSettingsActivity.java    | 105 +++
- 14 files changed, 1015 insertions(+), 5 deletions(-)
+ 14 files changed, 1043 insertions(+), 5 deletions(-)
  create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
  create mode 100644 TMessagesProj/src/main/java/org/telegram/messenger/TrustRules.java
  create mode 100644 TMessagesProj/src/main/java/org/telegram/ui/TrustSettingsActivity.java
@@ -167,10 +167,10 @@ index ed4cc2b3..fdc41a47 100644
                      ? allowAutoplay() && DownloadController.getInstance(root.currentAccount).canDownloadMedia(DownloadController.AUTODOWNLOAD_TYPE_VIDEO, document.size)
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java b/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
 new file mode 100644
-index 00000000..210f8c1c
+index 00000000..7eef9f80
 --- /dev/null
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/TrustController.java
-@@ -0,0 +1,741 @@
+@@ -0,0 +1,769 @@
 +package org.telegram.messenger;
 +
 +import android.content.Context;
@@ -180,6 +180,10 @@ index 00000000..210f8c1c
 +import android.util.LongSparseArray;
 +import android.util.SparseBooleanArray;
 +import android.view.View;
++import android.view.ViewParent;
++import android.widget.AbsListView;
++
++import androidx.recyclerview.widget.RecyclerView;
 +
 +import org.telegram.SQLite.SQLiteCursor;
 +import org.telegram.SQLite.SQLiteDatabase;
@@ -241,6 +245,7 @@ index 00000000..210f8c1c
 +    private volatile LongSparseArray<Integer> activeDays = new LongSparseArray<>(); // user id -> days in window
 +    private volatile long refreshedAt = -REFRESH_EVERY_MS - 1;
 +    private boolean refreshQueued; // storage queue only
++    private boolean refreshedOnce; // storage queue only
 +    private LongSparseArray<SparseBooleanArray> logged = new LongSparseArray<>(); // storage queue only: uid -> days in tc_activity
 +    private volatile long userId; // whose marks and activity the snapshots hold
 +
@@ -572,7 +577,7 @@ index 00000000..210f8c1c
 +    // new {media, image, thumb} locations.
 +    public static ImageLocation[] filter(ImageReceiver receiver, MessageObject messageObject, ImageLocation media, ImageLocation image, ImageLocation thumb) {
 +        final View parent = receiver.getParentView();
-+        if (!(parent instanceof ChatMessageCell || parent instanceof DialogCell || parent instanceof BackupImageView)) {
++        if (!(parent instanceof ChatMessageCell || parent instanceof DialogCell || parent instanceof BackupImageView && isChatBar(parent))) {
 +            return null; // viewers, shared media, anything you opened yourself
 +        }
 +        if (messageObject.messageOwner == null) {
@@ -610,6 +615,21 @@ index 00000000..210f8c1c
 +        return new ImageLocation[]{m, i, t};
 +    }
 +
++    // A BackupImageView counts only as the open chat's pinned-message or
++    // composer reply bar: not inside a list (shared files, downloads, the
++    // legacy media grid) and with a chat on top.
++    private static boolean isChatBar(View view) {
++        if (!(LaunchActivity.getSafeLastFragment() instanceof ChatActivity)) {
++            return false;
++        }
++        for (ViewParent p = view.getParent(); p != null; p = p.getParent()) {
++            if (p instanceof RecyclerView || p instanceof AbsListView) {
++                return false;
++            }
++        }
++        return true;
++    }
++
 +    private static boolean isLocal(ImageLocation location, MessageObject messageObject) {
 +        if (location == null) {
 +            return true;
@@ -624,7 +644,7 @@ index 00000000..210f8c1c
 +        }
 +        // A cached photo shows; GIF, video and document locations stay off
 +        // even when cached, so nothing autoplays.
-+        return location.document == null && location.photoSize != null && messageObject.mediaExists;
++        return location.document == null && location.photoSize != null && messageObject.mediaExists && MessageObject.isPhoto(messageObject.messageOwner);
 +    }
 +
 +    // ---- toast, menu, rebind ----
@@ -653,10 +673,14 @@ index 00000000..210f8c1c
 +        });
 +    }
 +
-+    // After a mark change: rebind the open chat's cells so the gates re-run.
++    // After a mark change (or a refresh, dialogId 0: any chat of this
++    // account): rebind the open chat's cells so the gates re-run.
 +    private void rebindOpenChat(long dialogId) {
 +        final BaseFragment fragment = LaunchActivity.getSafeLastFragment();
-+        if (!(fragment instanceof ChatActivity) || fragment.getCurrentAccount() != currentAccount || trustKey(((ChatActivity) fragment).getDialogId()) != trustKey(dialogId)) {
++        if (!(fragment instanceof ChatActivity) || fragment.getCurrentAccount() != currentAccount) {
++            return;
++        }
++        if (dialogId != 0 && trustKey(((ChatActivity) fragment).getDialogId()) != trustKey(dialogId)) {
 +            return;
 +        }
 +        final RecyclerListView listView = ((ChatActivity) fragment).getChatListView();
@@ -856,6 +880,10 @@ index 00000000..210f8c1c
 +            logged = all;
 +            activeDays = next;
 +            clearVerdicts();
++            if (!refreshedOnce) {
++                refreshedOnce = true;
++                AndroidUtilities.runOnUIThread(() -> rebindOpenChat(0)); // cells bound before the counts were in
++            }
 +        } catch (Exception e) {
 +            FileLog.e(e);
 +        } finally {
@@ -1042,7 +1070,7 @@ index 00000000..090ef52d
 +    }
 +}
 diff --git a/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java b/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java
-index a01edcfb..1b4371ac 100755
+index a01edcfb..a9680b03 100755
 --- a/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java
 +++ b/TMessagesProj/src/main/java/org/telegram/messenger/voip/VoIPService.java
 @@ -1108,7 +1108,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
@@ -1069,7 +1097,7 @@ index a01edcfb..1b4371ac 100755
  			final String logFilePath = BuildVars.DEBUG_VERSION ? VoIPHelper.getLogFilePath("voip" + privateCall.id) : VoIPHelper.getLogFilePath("" + privateCall.id, false);
  			final String statsLogFilePath = VoIPHelper.getLogFilePath("" + privateCall.id, true);
 -			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, privateCall.p2p_allowed, enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
-+			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, privateCall.p2p_allowed && org.telegram.messenger.TrustController.callP2P(currentAccount, user), enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
++			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, privateCall.p2p_allowed && org.telegram.messenger.TrustController.callP2P(currentAccount, user), enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data); // telegram-custom: media trust
  			lastLogFilePath = logFilePath;
  
  			// persistent state
