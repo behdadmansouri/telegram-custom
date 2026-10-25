@@ -12,3 +12,4 @@ Evidence: dated research and readouts, frozen once read. Conclusions live in `do
 | 2026-10-25-whats-custom-sheet-day.png | contact sheet preview of the 12 What's custom glyph pairs, day theme (made by .github/whats-custom-sheet.py) | 2026-10-25 |
 | 2026-10-25-whats-custom-sheet-night.png | the same sheet, night theme | 2026-10-25 |
 | 2026-10-25-trust-desktop-review.md | code review of desktop patch 0009 (media trust): 15 findings, 3 high | 2026-10-25 |
+| 2026-10-25-trust-android-review.md | code review of Android patch 0010 (media trust): 11 findings, 2 high | 2026-10-25 |
