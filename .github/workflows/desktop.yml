@@ -16,7 +16,8 @@ jobs:
     timeout-minutes: 360
     container: manjarolinux/base:latest
     permissions:
-      contents: write      # the Release on main
+      contents: write      # the Release on main, fast-forwarding main
+      issues: write        # a failed upstream bump opens one
       id-token: write      # build provenance (Sigstore)
       attestations: write
     env:
@@ -81,13 +82,30 @@ jobs:
           path: telegram-custom.tar.gz
           retention-days: 30
 
+      # An upstream bump that built green becomes main before it is released.
+      - name: Fast-forward main
+        if: startsWith(github.ref, 'refs/heads/upstream/')
+        run: |
+          git fetch -q origin main
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            # main moved on meanwhile: replay the one-line pin bump on top,
+            # unless main's new commits change what this build was made from
+            if ! git diff --quiet HEAD...origin/main -- desktop .github/workflows/desktop.yml; then
+              echo "::error::main changed this platform's sources during the build; rerun on a fresh bump"; exit 1
+            fi
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' rebase -q origin/main
+          fi
+          git push origin "HEAD:refs/heads/main"
+          git push origin --delete "${GITHUB_REF#refs/heads/}"
+          echo "RELEASE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - uses: actions/attest@v4
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/upstream/')
         with:
           subject-path: out/*.tar.gz
 
       - name: Release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/upstream/')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -97,10 +115,21 @@ jobs:
 
       # Skips with a notice while the two secrets are unset (see USAGE.md).
       - name: Announce on Telegram
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/upstream/')
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: .github/announce.sh desktop "$RELEASE_TAG" out/*.tar.gz
+
+      - name: Report a failed upstream bump
+        if: failure() && startsWith(github.ref, 'refs/heads/upstream/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          command -v gh > /dev/null || pacman -S --noconfirm --needed github-cli > /dev/null
+          failed=$(gh run view "$GITHUB_RUN_ID" --json jobs -q '[.jobs[].steps[] | select(.conclusion == "failure") | .name] | join(", ")')
+          gh issue create --title "${GITHUB_REF#refs/heads/}: build failed (${failed:-see run})" \
+            --body "The automatic upstream bump did not build, so nothing was released and main is unchanged. Failed step: ${failed:-unknown}. A patch that no longer applies shows up in **Customize** (Android) or **Build** (desktop). Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Fix it on the branch and rerun the workflow there, or delete the branch to let the next bump through."
